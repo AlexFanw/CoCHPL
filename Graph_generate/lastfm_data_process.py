@@ -8,13 +8,14 @@ class LastFmDataset(object):
         self.data_dir = data_dir + '/Graph_generate_data'
         self.load_entities()
         self.load_relations()
+
     def get_relation(self):
-        #Entities
+        # Entities
         USER = 'user'
         ITEM = 'item'
         FEATURE = 'feature'
 
-        #Relations
+        # Relations
         INTERACT = 'interact'
         FRIEND = 'friends'
         LIKE = 'like'
@@ -37,12 +38,13 @@ class LastFmDataset(object):
             }
         }
         fm_relation_link_entity_type = {
-            INTERACT:  [USER, ITEM],
-            FRIEND:  [USER, USER],
-            LIKE:  [USER, FEATURE],
-            BELONG_TO:  [ITEM, FEATURE]
+            INTERACT: [USER, ITEM],
+            FRIEND: [USER, USER],
+            LIKE: [USER, FEATURE],
+            BELONG_TO: [ITEM, FEATURE]
         }
         return fm_relation, relation_name, fm_relation_link_entity_type
+
     def load_entities(self):
         entity_files = edict(
             user='user_dict.json',
@@ -50,13 +52,13 @@ class LastFmDataset(object):
             feature='merged_tag_map.json',
         )
         for entity_name in entity_files:
-            with open(os.path.join(self.data_dir,entity_files[entity_name]), encoding='utf-8') as f:
+            with open(os.path.join(self.data_dir, entity_files[entity_name]), encoding='utf-8') as f:
                 mydict = json.load(f)
             if entity_name == 'feature':
                 entity_id = list(mydict.values())
             else:
                 entity_id = list(map(int, list(mydict.keys())))
-            setattr(self, entity_name, edict(id=entity_id, value_len=max(entity_id)+1))
+            setattr(self, entity_name, edict(id=entity_id, value_len=max(entity_id) + 1))
             print('Load', entity_name, 'of size', len(entity_id))
             print(entity_name, 'of max id is', max(entity_id))
 
@@ -66,7 +68,7 @@ class LastFmDataset(object):
         --
         """
         LastFm_relations = edict(
-            interact=('user_item.json', self.user, self.item), #(filename, head_entity, tail_entity)
+            interact=('user_item.json', self.user, self.item),  # (filename, head_entity, tail_entity)
             friends=('user_dict.json', self.user, self.user),
             like=('user_dict.json', self.user, self.feature),
             belong_to=('item_dict.json', self.item, self.feature),
@@ -103,9 +105,3 @@ class LastFmDataset(object):
             for i in knowledge:
                 tuple_num += len(i)
             print('Load', name, 'of size', tuple_num)
-
-
-
-
-
-

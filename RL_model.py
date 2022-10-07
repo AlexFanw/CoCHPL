@@ -1,4 +1,3 @@
-
 import math
 import random
 import numpy as np
@@ -17,7 +16,7 @@ import torch.nn.functional as F
 from utils import *
 from sum_tree import SumTree
 
-#TODO select env
+# TODO select env
 from RL.env_binary_question import BinaryRecommendEnv
 from RL.env_enumerated_question import EnumeratedRecommendEnv
 from RL.RL_evaluate import dqn_evaluate
@@ -31,7 +30,7 @@ EnvDict = {
     LAST_FM_STAR: BinaryRecommendEnv,
     YELP: EnumeratedRecommendEnv,
     YELP_STAR: BinaryRecommendEnv
-    }
+}
 FeatureDict = {
     LAST_FM: 'feature',
     LAST_FM_STAR: 'feature',
@@ -41,6 +40,7 @@ FeatureDict = {
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'next_cand'))
+
 
 class ReplayMemory(object):
 
@@ -64,18 +64,18 @@ class ReplayMemory(object):
 
 class ReplayMemoryPER(object):
     # stored as ( s, a, r, s_ ) in SumTree
-    def __init__(self, capacity, a = 0.6, e = 0.01):
-        self.tree =  SumTree(capacity)
+    def __init__(self, capacity, a=0.6, e=0.01):
+        self.tree = SumTree(capacity)
         self.capacity = capacity
         self.prio_max = 0.1
         self.a = a
         self.e = e
         self.beta = 0.4
         self.beta_increment_per_sampling = 0.001
-        
+
     def push(self, *args):
         data = Transition(*args)
-        p = (np.abs(self.prio_max) + self.e) ** self.a #  proportional priority
+        p = (np.abs(self.prio_max) + self.e) ** self.a  # proportional priority
         self.tree.add(p, data)
 
     def sample(self, batch_size):
@@ -89,25 +89,25 @@ class ReplayMemoryPER(object):
             b = segment * (i + 1)
             s = random.uniform(a, b)
             idx, p, data = self.tree.get(s)
-            
+
             batch_data.append(data)
             priorities.append(p)
             idxs.append(idx)
-        
+
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
-        
+
         sampling_probabilities = priorities / self.tree.total()
         is_weight = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
         is_weight /= is_weight.max()
 
         return idxs, batch_data, is_weight
-    
+
     def update(self, idxs, errors):
         self.prio_max = max(self.prio_max, max(np.abs(errors)))
         for i, idx in enumerate(idxs):
             p = (np.abs(errors[i]) + self.e) ** self.a
-            self.tree.update(idx, p) 
-        
+            self.tree.update(idx, p)
+
     def __len__(self):
         return self.tree.n_entries
 
@@ -119,7 +119,7 @@ class DQN(nn.Module):
         self.fc2_value = nn.Linear(hidden_size, hidden_size)
         self.out_value = nn.Linear(hidden_size, 1)
         # Q(s,a)
-        self.fc2_advantage = nn.Linear(hidden_size + action_size, hidden_size)   
+        self.fc2_advantage = nn.Linear(hidden_size + action_size, hidden_size)
         self.out_advantage = nn.Linear(hidden_size, 1)
 
     def forward(self, x, y, choose_action=True):
@@ -128,12 +128,12 @@ class DQN(nn.Module):
         :return: v: action score [N*K]
         """
         # V(s)
-        value = self.out_value(F.relu(self.fc2_value(x))).squeeze(dim=2) #[N*1*1]
+        value = self.out_value(F.relu(self.fc2_value(x))).squeeze(dim=2)  # [N*1*1]
         # Q(s,a)
         if choose_action:
             x = x.repeat(1, y.size(1), 1)
-        state_cat_action = torch.cat((x,y),dim=2)
-        advantage = self.out_advantage(F.relu(self.fc2_advantage(state_cat_action))).squeeze(dim=2) #[N*K]
+        state_cat_action = torch.cat((x, y), dim=2)
+        advantage = self.out_advantage(F.relu(self.fc2_advantage(state_cat_action))).squeeze(dim=2)  # [N*K]
 
         if choose_action:
             qsa = advantage + value - advantage.mean(dim=1, keepdim=True)
@@ -144,7 +144,8 @@ class DQN(nn.Module):
 
 
 class Agent(object):
-    def __init__(self, device, memory, state_size, action_size, hidden_size, gcn_net, learning_rate, l2_norm, PADDING_ID, EPS_START = 0.9, EPS_END = 0.1, EPS_DECAY = 0.0001, tau=0.01):
+    def __init__(self, device, memory, state_size, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
+                 PADDING_ID, EPS_START=0.9, EPS_END=0.1, EPS_DECAY=0.0001, tau=0.01):
         self.EPS_START = EPS_START
         self.EPS_END = EPS_END
         self.EPS_DECAY = EPS_DECAY
@@ -155,12 +156,12 @@ class Agent(object):
         self.target_net = DQN(state_size, action_size, hidden_size).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
-        self.optimizer = optim.Adam(chain(self.policy_net.parameters(),self.gcn_net.parameters()), lr=learning_rate, weight_decay = l2_norm)
+        self.optimizer = optim.Adam(chain(self.policy_net.parameters(), self.gcn_net.parameters()), lr=learning_rate,
+                                    weight_decay=l2_norm)
         self.memory = memory
         self.loss_func = nn.MSELoss()
         self.PADDING_ID = PADDING_ID
         self.tau = tau
-
 
     def select_action(self, state, cand, action_space, is_test=False, is_last_turn=False):
         state_emb = self.gcn_net([state])
@@ -180,26 +181,26 @@ class Agent(object):
                 sorted_actions = cand[0][actions_value.sort(1, True)[1].tolist()]
                 return action, sorted_actions.tolist()
         else:
-            shuffled_cand = action_space[0]+action_space[1]
+            shuffled_cand = action_space[0] + action_space[1]
             random.shuffle(shuffled_cand)
             return torch.tensor(shuffled_cand[0], device=self.device, dtype=torch.long), shuffled_cand
-    
+
     def update_target_model(self):
-        #soft assign
+        # soft assign
         for target_param, param in zip(self.target_net.parameters(), self.policy_net.parameters()):
             target_param.data.copy_(self.tau * param.data + target_param.data * (1.0 - self.tau))
 
     def optimize_model(self, BATCH_SIZE, GAMMA):
         if len(self.memory) < BATCH_SIZE:
             return
-        
+
         self.update_target_model()
-        
+
         idxs, transitions, is_weights = self.memory.sample(BATCH_SIZE)
         batch = Transition(*zip(*transitions))
 
         state_emb_batch = self.gcn_net(list(batch.state))
-        action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(self.device) #[N*1]
+        action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(self.device)  # [N*1]
         action_emb_batch = self.gcn_net.embedding(action_batch)
         reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).to(self.device)
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
@@ -217,10 +218,12 @@ class Agent(object):
         q_eval = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False)
 
         # Double DQN
-        best_actions = torch.gather(input=next_cand_batch, dim=1, index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(dim=1).view(len(n_states),1).to(self.device))
+        best_actions = torch.gather(input=next_cand_batch, dim=1,
+                                    index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(dim=1).view(
+                                        len(n_states), 1).to(self.device))
         best_actions_emb = self.gcn_net.embedding(best_actions)
-        q_target = torch.zeros((BATCH_SIZE,1), device=self.device)
-        q_target[non_final_mask] = self.target_net(next_state_emb_batch,best_actions_emb,choose_action=False).detach()
+        q_target = torch.zeros((BATCH_SIZE, 1), device=self.device)
+        q_target[non_final_mask] = self.target_net(next_state_emb_batch, best_actions_emb, choose_action=False).detach()
         q_target = reward_batch + GAMMA * q_target
 
         # prioritized experience replay
@@ -236,14 +239,17 @@ class Agent(object):
         self.optimizer.step()
 
         return loss.data
-    
+
     def save_model(self, data_name, filename, epoch_user):
-        save_rl_agent(dataset=data_name, model={'policy': self.policy_net.state_dict(), 'gcn': self.gcn_net.state_dict()}, filename=filename, epoch_user=epoch_user)
+        save_rl_agent(dataset=data_name,
+                      model={'policy': self.policy_net.state_dict(), 'gcn': self.gcn_net.state_dict()},
+                      filename=filename, epoch_user=epoch_user)
+
     def load_model(self, data_name, filename, epoch_user):
         model_dict = load_rl_agent(dataset=data_name, filename=filename, epoch_user=epoch_user)
         self.policy_net.load_state_dict(model_dict['policy'])
         self.gcn_net.load_state_dict(model_dict['gcn'])
-    
+
     def padding(self, cand):
         pad_size = max([len(c) for c in cand])
         padded_cand = []
@@ -256,15 +262,27 @@ class Agent(object):
 
 
 def train(args, kg, dataset, filename):
-    env = EnvDict[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn, cand_num=args.cand_num, cand_item_num=args.cand_item_num,
-                       attr_num=args.attr_num, mode='train', ask_num=args.ask_num, entropy_way=args.entropy_method, fm_epoch=args.fm_epoch)
+    """RL Model Train
+
+    :param args: some experiment settings
+    :param kg: knowledge graph
+    :param dataset: dataset
+    :param filename: training model file saving path
+    :return:
+    """
+    env = EnvDict[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
+                                  cand_num=args.cand_num, cand_item_num=args.cand_item_num,
+                                  attr_num=args.attr_num, mode='train', ask_num=args.ask_num,
+                                  entropy_way=args.entropy_method, fm_epoch=args.fm_epoch)
     set_random_seed(args.seed)
-    memory = ReplayMemoryPER(args.memory_size) #50000
-    embed = torch.FloatTensor(np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1,env.ui_embeds.shape[1]))), axis=0))
-    gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg, embeddings=embed, \
-        fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
-    agent = Agent(device=args.device, memory=memory, state_size=args.hidden, action_size=embed.size(1), \
-        hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm, PADDING_ID=embed.size(0)-1)
+    memory = ReplayMemoryPER(args.memory_size)  # 50000
+    embed = torch.FloatTensor(
+        np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
+    gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg, embeddings=embed,
+                           fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
+    agent = Agent(device=args.device, memory=memory, state_size=args.hidden, action_size=embed.size(1),
+                  hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm,
+                  PADDING_ID=embed.size(0) - 1)
     # self.reward_dict = {
     #     'ask_suc': 0.01,
     #     'ask_fail': -0.1,
@@ -272,9 +290,9 @@ def train(args, kg, dataset, filename):
     #     'rec_fail': -0.1,
     #     'until_T': -0.3,  # until MAX_Turn
     # }
-    #ealuation metric  ST@T
-    #agent load policy parameters
-    if args.load_rl_epoch != 0 :
+    # evaluation metric  ST@T
+    # agent load policy parameters
+    if args.load_rl_epoch != 0:
         print('Staring loading rl model in epoch {}'.format(args.load_rl_epoch))
         agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
 
@@ -282,25 +300,28 @@ def train(args, kg, dataset, filename):
     if args.eval_num == 1:
         SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, 0)
         test_performance.append(SR15_mean)
-    for train_step in range(1, args.max_steps+1):
+    for train_step in range(1, args.max_steps + 1):
+        print(">>>Train Step: {}, Total: {}".format(train_step, args.max_steps))
         SR5, SR10, SR15, AvgT, Rank, total_reward = 0., 0., 0., 0., 0., 0.
         loss = torch.tensor(0, dtype=torch.float, device=args.device)
-        for i_episode in tqdm(range(args.sample_times),desc='sampling'):
-            #blockPrint()
+        for i_episode in tqdm(range(args.sample_times), desc='sampling'):
+            blockPrint()
             print('\n================new tuple:{}===================='.format(i_episode))
             if not args.fix_emb:
-                state, cand, action_space = env.reset(agent.gcn_net.embedding.weight.data.cpu().detach().numpy())  # Reset environment and record the starting state
+                state, cand, action_space = env.reset(
+                    agent.gcn_net.embedding.weight.data.cpu().detach().numpy())  # Reset environment and record the starting state
             else:
-                state, cand, action_space = env.reset() 
-            #state = torch.unsqueeze(torch.FloatTensor(state), 0).to(args.device)
+                state, cand, action_space = env.reset()
+                # state = torch.unsqueeze(torch.FloatTensor(state), 0).to(args.device)
             epi_reward = 0
             is_last_turn = False
-            for t in count():   # user  dialog
+            for t in count():  # user  dialog
                 if t == 14:
                     is_last_turn = True
                 action, sorted_actions = agent.select_action(state, cand, action_space, is_last_turn=is_last_turn)
                 if not args.fix_emb:
-                    next_state, next_cand, action_space, reward, done = env.step(action.item(), sorted_actions, agent.gcn_net.embedding.weight.data.cpu().detach().numpy())
+                    next_state, next_cand, action_space, reward, done = env.step(action.item(), sorted_actions,
+                                                                                 agent.gcn_net.embedding.weight.data.cpu().detach().numpy())
                 else:
                     next_state, next_cand, action_space, reward, done = env.step(action.item(), sorted_actions)
                 epi_reward += reward
@@ -328,17 +349,19 @@ def train(args, kg, dataset, filename):
                             SR15 += 1
                         else:
                             SR15 += 1
-                        Rank += (1/math.log(t+3,2) + (1/math.log(t+2,2)-1/math.log(t+3,2))/math.log(done+1,2))
+                        Rank += (1 / math.log(t + 3, 2) + (1 / math.log(t + 2, 2) - 1 / math.log(t + 3, 2)) / math.log(
+                            done + 1, 2))
                     else:
                         Rank += 0
-                    AvgT += t+1
+                    AvgT += t + 1
                     total_reward += epi_reward
                     break
-        enablePrint() # Enable print function
-        print('loss : {} in epoch_uesr {}'.format(loss.item()/args.sample_times, args.sample_times))
+        enablePrint()  # Enable print function
+        print('loss : {} in epoch_uesr {}'.format(loss.item() / args.sample_times, args.sample_times))
         print('SR5:{}, SR10:{}, SR15:{}, AvgT:{}, Rank:{}, rewards:{} '
-                  'Total epoch_uesr:{}'.format(SR5 / args.sample_times, SR10 / args.sample_times, SR15 / args.sample_times,
-                                                AvgT / args.sample_times, Rank / args.sample_times, total_reward / args.sample_times, args.sample_times))
+              'Total epoch_uesr:{}'.format(SR5 / args.sample_times, SR10 / args.sample_times, SR15 / args.sample_times,
+                                           AvgT / args.sample_times, Rank / args.sample_times,
+                                           total_reward / args.sample_times, args.sample_times))
 
         if train_step % args.eval_num == 0:
             SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, train_step)
@@ -363,7 +386,8 @@ def main():
 
     parser.add_argument('--data_name', type=str, default=LAST_FM, choices=[LAST_FM, LAST_FM_STAR, YELP, YELP_STAR],
                         help='One of {LAST_FM, LAST_FM_STAR, YELP, YELP_STAR}.')
-    parser.add_argument('--entropy_method', type=str, default='weight_entropy', help='entropy_method is one of {entropy, weight entropy}')
+    parser.add_argument('--entropy_method', type=str, default='weight_entropy',
+                        help='entropy_method is one of {entropy, weight entropy}')
     # Although the performance of 'weighted entropy' is better, 'entropy' is an alternative method considering the time cost.
     parser.add_argument('--max_turn', type=int, default=15, help='max conversation turn')
     parser.add_argument('--attr_num', type=int, help='the number of attributes')
@@ -380,28 +404,33 @@ def main():
     parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')
     parser.add_argument('--fix_emb', action='store_false', help='fix embedding or not')
     parser.add_argument('--embed', type=str, default='transe', help='pretrained embeddings')
-    parser.add_argument('--seq', type=str, default='transformer', choices=['rnn', 'transformer', 'mean'], help='sequential learning method')
+    parser.add_argument('--seq', type=str, default='transformer', choices=['rnn', 'transformer', 'mean'],
+                        help='sequential learning method')
     parser.add_argument('--gcn', action='store_false', help='use GCN or not')
-
-
     args = parser.parse_args()
+
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     args.device = torch.device('cuda') if torch.cuda.is_available() else 'cpu'
-    print(args.device)
-    print('data_set:{}'.format(args.data_name))
+    print('DEVICE: {}'.format(args.device))
+    print('DATASET: {}'.format(args.data_name))
+
+    # Load kg.pkl
     kg = load_kg(args.data_name)
-    #reset attr_num
     feature_name = FeatureDict[args.data_name]
     feature_length = len(kg.G[feature_name].keys())
-    print('dataset:{}, feature_length:{}'.format(args.data_name, feature_length))
+    print('FEATURE NUMBER: {}'.format(feature_length))
     args.attr_num = feature_length  # set attr_num  = feature_length
-    print('args.attr_num:', args.attr_num)
-    print('args.entropy_method:', args.entropy_method)
+    print('ATTRIBUTE NUMBER', args.attr_num)
+    print('ENTROPY METHOD:', args.entropy_method)
 
+    # Load dataset.pkl
     dataset = load_dataset(args.data_name)
+
+    # Train
     filename = 'train-data-{}-RL-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
         args.data_name, args.cand_num, args.cand_item_num, args.embed, args.seq, args.gcn)
     train(args, kg, dataset, filename)
+
 
 if __name__ == '__main__':
     main()
