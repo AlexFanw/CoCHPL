@@ -41,25 +41,25 @@ def main():
     print('Save', args.data_name, 'graph successfully!')
 
 
-def construct(kg):
-    users = kg.G['user'].keys()
-    items = kg.G['item'].keys()
-    features = kg.G['feature'].keys()
-    num_node = len(users) + len(items) + len(features)
-    graph = np.zeros((num_node, num_node))
-    for i in range(num_node):
-        for j in range(num_node):
-            if i < len(users) and j < len(users)+len(items):
-                graph[i][j] = 1
-                graph[j][i] = 1
-            elif i >= len(users) and i < len(users)+len(items):
-                if j-len(users)-len(items) in kg.G['item'][i-len(users)]['belong_to']:
-                    graph[i][j] = 1
-                    graph[j][i] = 1
-            else:
-                pass
-    print(graph)
-    return graph
+# def construct(kg):
+#     users = kg.G['user'].keys()
+#     items = kg.G['item'].keys()
+#     features = kg.G['feature'].keys()
+#     num_node = len(users) + len(items) + len(features)
+#     graph = np.zeros((num_node, num_node))
+#     for i in range(num_node):
+#         for j in range(num_node):
+#             if i < len(users) and j < len(users)+len(items):
+#                 graph[i][j] = 1
+#                 graph[j][i] = 1
+#             elif len(users) <= i < len(users)+len(items):
+#                 if j-len(users)-len(items) in kg.G['item'][i-len(users)]['belong_to']:
+#                     graph[i][j] = 1
+#                     graph[j][i] = 1
+#             else:
+#                 pass
+#     print(graph)
+#     return graph
 
 
 if __name__ == '__main__':

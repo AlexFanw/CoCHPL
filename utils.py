@@ -4,11 +4,12 @@ import random
 import torch
 import os
 import sys
+
 # from knowledge_graph import KnowledgeGraph
 # from data_process import LastFmDataset
 # from KG_data_generate.lastfm_small_data_process import LastFmSmallDataset
 # from KG_data_generate.lastfm_knowledge_graph import KnowledgeGraph
-#Dataset names
+# Dataset names
 LAST_FM = 'LAST_FM'
 LAST_FM_STAR = 'LAST_FM_STAR'
 YELP = 'YELP'
@@ -26,30 +27,39 @@ TMP_DIR = {
     LAST_FM_STAR: './tmp/last_fm_star',
     YELP_STAR: './tmp/yelp_star',
 }
+
+
 def cuda_(var):
     return var.cuda() if torch.cuda.is_available() else var
+
+
 def save_dataset(dataset, dataset_obj):
     dataset_file = TMP_DIR[dataset] + '/dataset.pkl'
     with open(dataset_file, 'wb') as f:
         pickle.dump(dataset_obj, f)
+
 
 def load_dataset(dataset):
     dataset_file = TMP_DIR[dataset] + '/dataset.pkl'
     dataset_obj = pickle.load(open(dataset_file, 'rb'))
     return dataset_obj
 
+
 def save_kg(dataset, kg):
     kg_file = TMP_DIR[dataset] + '/kg.pkl'
     pickle.dump(kg, open(kg_file, 'wb'))
+
 
 def load_kg(dataset):
     kg_file = TMP_DIR[dataset] + '/kg.pkl'
     kg = pickle.load(open(kg_file, 'rb'))
     return kg
 
+
 def save_graph(dataset, graph):
     graph_file = TMP_DIR[dataset] + '/graph.pkl'
     pickle.dump(graph, open(graph_file, 'wb'))
+
 
 def load_graph(dataset):
     graph_file = TMP_DIR[dataset] + '/graph.pkl'
@@ -73,6 +83,7 @@ def load_rl_agent(dataset, filename, epoch_user):
     model_dict = torch.load(model_file)
     print('RL policy model load at {}'.format(model_file))
     return model_dict
+
 
 def save_rl_agent(dataset, model, filename, epoch_user):
     model_file = TMP_DIR[dataset] + '/RL-agent/' + filename + '-epoch-{}.pkl'.format(epoch_user)
@@ -111,6 +122,7 @@ def save_rl_mtric(dataset, filename, epoch, SR, spend_time, mode='train'):
             f.write('================================\n')
             # f.write('1000 loss: {}\n'.format(loss_1000))
 
+
 def save_rl_model_log(dataset, filename, epoch, epoch_loss, train_len):
     PATH = TMP_DIR[dataset] + '/RL-log-merge/' + filename + '.txt'
     if not os.path.isdir(TMP_DIR[dataset] + '/RL-log-merge/'):
@@ -119,6 +131,7 @@ def save_rl_model_log(dataset, filename, epoch, epoch_loss, train_len):
         f.write('Starting {} epoch\n'.format(epoch))
         f.write('training loss : {}\n'.format(epoch_loss / train_len))
         # f.write('1000 loss: {}\n'.format(loss_1000))
+
 
 def set_random_seed(seed):
     random.seed(seed)
@@ -131,6 +144,7 @@ def set_random_seed(seed):
 # Disable
 def blockPrint():
     sys.stdout = open(os.devnull, 'w')
+
 
 # Restore
 def enablePrint():

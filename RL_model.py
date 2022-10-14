@@ -370,8 +370,7 @@ def train(args, kg, dataset, filename):
             agent.save_model(data_name=args.data_name, filename=filename, epoch_user=train_step)
     print(test_performance)
 
-
-def main():
+def set_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', '-seed', type=int, default=1, help='random seed.')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')
@@ -383,7 +382,6 @@ def main():
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
     parser.add_argument('--hidden', type=int, default=100, help='number of samples')
     parser.add_argument('--memory_size', type=int, default=50000, help='size of memory ')
-
     parser.add_argument('--data_name', type=str, default=LAST_FM, choices=[LAST_FM, LAST_FM_STAR, YELP, YELP_STAR],
                         help='One of {LAST_FM, LAST_FM_STAR, YELP, YELP_STAR}.')
     parser.add_argument('--entropy_method', type=str, default='weight_entropy',
@@ -408,7 +406,11 @@ def main():
                         help='sequential learning method')
     parser.add_argument('--gcn', action='store_false', help='use GCN or not')
     args = parser.parse_args()
+    return args
 
+
+if __name__ == '__main__':
+    args = set_arguments()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     args.device = torch.device('cuda') if torch.cuda.is_available() else 'cpu'
     print('DEVICE: {}'.format(args.device))
@@ -430,7 +432,3 @@ def main():
     filename = 'train-data-{}-RL-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
         args.data_name, args.cand_num, args.cand_item_num, args.embed, args.seq, args.gcn)
     train(args, kg, dataset, filename)
-
-
-if __name__ == '__main__':
-    main()
