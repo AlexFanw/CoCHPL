@@ -1,33 +1,36 @@
-import os
 import json
+import os
+
 from easydict import EasyDict as edict
+
 
 class YelpDataset(object):
     def __init__(self, data_dir):
         self.data_dir = data_dir + '/Graph_generate_data'
         self.load_entities()
         self.load_relations()
+
     def get_relation(self):
-        #Entities
+        # Entities
         USER = 'user'
         ITEM = 'item'
         FEATURE = 'feature'
         LARGE_FEATURE = 'large_feature'
 
-        #Relations
+        # Relations
         INTERACT = 'interact'
         FRIEND = 'friends'
         LIKE = 'like'
         BELONG_TO = 'belong_to'
         BELONG_TO_LARGE = 'belong_to_large'  # feature(second-layer tag) --> large_feature(first-layer tag)
-        LINK_TO_FEATURE = 'link_to_feature'   # large_feature(first-layer tag)  -->  feature(second-layer tag)
+        LINK_TO_FEATURE = 'link_to_feature'  # large_feature(first-layer tag)  -->  feature(second-layer tag)
         relation_name = [INTERACT, FRIEND, LIKE, BELONG_TO, BELONG_TO_LARGE, LINK_TO_FEATURE]
 
         fm_relation = {
             USER: {
                 INTERACT: ITEM,
                 FRIEND: USER,
-                LIKE: FEATURE,   #There is no such relationship in yelp
+                LIKE: FEATURE,  # There is no such relationship in yelp
             },
             ITEM: {
                 BELONG_TO: FEATURE,
@@ -48,14 +51,15 @@ class YelpDataset(object):
 
         }
         relation_link_entity_type = {
-            INTERACT:  [USER, ITEM],
-            FRIEND:  [USER, USER],
-            LIKE:  [USER, FEATURE],
-            BELONG_TO:  [ITEM, FEATURE],
-            BELONG_TO_LARGE:  [ITEM, LARGE_FEATURE],
+            INTERACT: [USER, ITEM],
+            FRIEND: [USER, USER],
+            LIKE: [USER, FEATURE],
+            BELONG_TO: [ITEM, FEATURE],
+            BELONG_TO_LARGE: [ITEM, LARGE_FEATURE],
             LINK_TO_FEATURE: [LARGE_FEATURE, FEATURE]
         }
         return fm_relation, relation_name, relation_link_entity_type
+
     def load_entities(self):
         entity_files = edict(
             user='user_dict.json',
@@ -64,7 +68,7 @@ class YelpDataset(object):
             large_feature='first-layer_merged_tag_map.json'
         )
         for entity_name in entity_files:
-            with open(os.path.join(self.data_dir,entity_files[entity_name]), encoding='utf-8') as f:
+            with open(os.path.join(self.data_dir, entity_files[entity_name]), encoding='utf-8') as f:
                 mydict = json.load(f)
             if entity_name in ['feature']:
                 entity_id = list(mydict.values())
@@ -72,7 +76,7 @@ class YelpDataset(object):
                 entity_id = list(map(int, list(mydict.values())))
             else:
                 entity_id = list(map(int, list(mydict.keys())))
-            setattr(self, entity_name, edict(id=entity_id, value_len=max(entity_id)+1))
+            setattr(self, entity_name, edict(id=entity_id, value_len=max(entity_id) + 1))
             print('Load', entity_name, 'of size', len(entity_id))
             print(entity_name, 'of max id is', max(entity_id))
 
@@ -82,7 +86,7 @@ class YelpDataset(object):
         --
         """
         Yelp_relations = edict(
-            interact=('user_item.json', self.user, self.item), #(filename, head_entity, tail_entity)
+            interact=('user_item.json', self.user, self.item),  # (filename, head_entity, tail_entity)
             friends=('user_dict.json', self.user, self.user),
             like=('user_dict.json', self.user, self.feature),
             belong_to=('item_dict-original_tag.json', self.item, self.feature),
@@ -128,4 +132,3 @@ class YelpDataset(object):
             for i in knowledge:
                 tuple_num += len(i)
             print('Load', name, 'of size', tuple_num)
-

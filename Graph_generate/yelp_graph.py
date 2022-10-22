@@ -1,4 +1,3 @@
-
 class YelpGraph(object):
 
     def __init__(self, dataset):
