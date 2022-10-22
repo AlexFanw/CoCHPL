@@ -79,8 +79,7 @@ class LastFmStarDataset(object):
             relation = edict(
                 data=[],
             )
-            knowledge = [list([]) for i in
-                         range(LastFm_relations[name][1].value_len)]
+            knowledge = [list([]) for i in range(LastFm_relations[name][1].value_len)]
             # load relation files
             with open(os.path.join(self.data_dir, LastFm_relations[name][0]), encoding='utf-8') as f:
                 mydict = json.load(f)
