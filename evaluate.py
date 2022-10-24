@@ -45,14 +45,14 @@ FeatureDict = {
 def evaluate(args, kg, dataset, filename):
     test_env = EnvDict[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                        cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num, mode='test', ask_num=args.ask_num, entropy_way=args.entropy_method,
-                                       fm_epoch=args.fm_epoch)
+                                       )
     set_random_seed(args.seed)
     memory = ReplayMemoryPER(args.memory_size) #10000
     embed = torch.FloatTensor(np.concatenate((test_env.ui_embeds, test_env.feature_emb, np.zeros((1,test_env.ui_embeds.shape[1]))), axis=0))
-    gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg, embeddings=embed, \
-        fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
-    agent = Agent(device=args.device, memory=memory, state_size=args.hidden, action_size=embed.size(1), \
-        hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm, PADDING_ID=embed.size(0)-1)
+    gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg, embeddings=embed,
+                           fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
+    agent = Agent(device=args.device, memory=memory, state_size=args.hidden, action_size=embed.size(1),
+                  hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm, PADDING_ID=embed.size(0)-1)
     print('Staring loading rl model in epoch {}'.format(args.load_rl_epoch))
     agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
 
@@ -150,8 +150,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', '-seed', type=int, default=1, help='random seed.')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')
-    parser.add_argument('--epochs', '-me', type=int, default=50000, help='the number of RL train epoch')
-    parser.add_argument('--fm_epoch', type=int, default=0, help='the epoch of FM embedding')
+    # parser.add_argument('--epochs', '-me', type=int, default=50000, help='the number of RL train epoch')
+    # parser.add_argument('--fm_epoch', type=int, default=0, help='the epoch of FM embedding')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size.')
     parser.add_argument('--gamma', type=float, default=0.999, help='reward discount factor.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate.')

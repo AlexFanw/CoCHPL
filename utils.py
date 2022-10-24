@@ -67,7 +67,7 @@ def load_graph(dataset):
     return graph
 
 
-def load_embed(dataset, embed, epoch):
+def load_embed(dataset, embed):
     if embed:
         path = TMP_DIR[dataset] + '/embeds/' + '{}.pkl'.format(embed)
     else:

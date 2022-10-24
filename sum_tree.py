@@ -1,8 +1,10 @@
 import numpy as np
 
 # SumTree
-# a binary tree data structure where the parent’s value is the sum of its children
 class SumTree(object):
+    """a binary tree data structure where the parent’s value is the sum of its children
+
+    """
     write = 0
 
     def __init__(self, capacity):

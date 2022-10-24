@@ -76,7 +76,7 @@ class GraphEncoder(Module):
         """
         batch_output = []
         for s in b_state:
-            #neighbors, adj = self.get_state_graph(s)
+            # neighbors, adj = self.get_state_graph(s)
             neighbors, adj = s['neighbors'].to(self.device), s['adj'].to(self.device)
             input_state = self.embedding(neighbors)
             if self.gcn:

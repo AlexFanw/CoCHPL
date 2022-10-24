@@ -4,8 +4,6 @@ import numpy as np
 import os
 import sys
 from tqdm import tqdm
-# sys.path.append('..')
-
 from collections import namedtuple
 import argparse
 from itertools import count, chain
@@ -16,7 +14,6 @@ import torch.nn.functional as F
 from utils import *
 from sum_tree import SumTree
 
-# TODO select env
 from RL.env_binary_question import BinaryRecommendEnv
 from RL.env_enumerated_question import EnumeratedRecommendEnv
 from RL.RL_evaluate import dqn_evaluate
@@ -42,27 +39,10 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'next_cand'))
 
 
-class ReplayMemory(object):
-
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
-        self.position = 0
-
-    def push(self, *args):
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        self.memory[self.position] = Transition(*args)
-        self.position = (self.position + 1) % self.capacity
-
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
-
-    def __len__(self):
-        return len(self.memory)
-
-
 class ReplayMemoryPER(object):
+    """Prioritized Experience Replay
+
+    """
     # stored as ( s, a, r, s_ ) in SumTree
     def __init__(self, capacity, a=0.6, e=0.01):
         self.tree = SumTree(capacity)
@@ -273,34 +253,30 @@ def train(args, kg, dataset, filename):
     env = EnvDict[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                   cand_num=args.cand_num, cand_item_num=args.cand_item_num,
                                   attr_num=args.attr_num, mode='train', ask_num=args.ask_num,
-                                  entropy_way=args.entropy_method, fm_epoch=args.fm_epoch)
+                                  entropy_way=args.entropy_method)
     set_random_seed(args.seed)
+    # Memory
     memory = ReplayMemoryPER(args.memory_size)  # 50000
-    embed = torch.FloatTensor(
-        np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
+    # UI Feature Embedding
+    embed = torch.FloatTensor(np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
+    # GCN Transformer
     gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg, embeddings=embed,
                            fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
+    # Agent
     agent = Agent(device=args.device, memory=memory, state_size=args.hidden, action_size=embed.size(1),
                   hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm,
                   PADDING_ID=embed.size(0) - 1)
-    # self.reward_dict = {
-    #     'ask_suc': 0.01,
-    #     'ask_fail': -0.1,
-    #     'rec_suc': 1,
-    #     'rec_fail': -0.1,
-    #     'until_T': -0.3,  # until MAX_Turn
-    # }
     # evaluation metric  ST@T
     # agent load policy parameters
     if args.load_rl_epoch != 0:
-        print('Staring loading rl model in epoch {}'.format(args.load_rl_epoch))
+        print('Loading RL Agent in epoch {}'.format(args.load_rl_epoch))
         agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
 
     test_performance = []
     if args.eval_num == 1:
         SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, 0)
         test_performance.append(SR15_mean)
-    for train_step in range(1, args.max_steps + 1):
+    for train_step in range(1 + args.load_rl_epoch, args.max_steps + 1):
         print(">>>Train Step: {}, Total: {}".format(train_step, args.max_steps))
         SR5, SR10, SR15, AvgT, Rank, total_reward = 0., 0., 0., 0., 0., 0.
         loss = torch.tensor(0, dtype=torch.float, device=args.device)
@@ -308,8 +284,9 @@ def train(args, kg, dataset, filename):
             blockPrint()
             print('\n================new tuple:{}===================='.format(i_episode))
             if not args.fix_emb:
+                # Reset environment and record the starting state
                 state, cand, action_space = env.reset(
-                    agent.gcn_net.embedding.weight.data.cpu().detach().numpy())  # Reset environment and record the starting state
+                    agent.gcn_net.embedding.weight.data.cpu().detach().numpy())
             else:
                 state, cand, action_space = env.reset()
                 # state = torch.unsqueeze(torch.FloatTensor(state), 0).to(args.device)
@@ -374,8 +351,8 @@ def set_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', '-seed', type=int, default=1, help='random seed.')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')
-    parser.add_argument('--epochs', '-me', type=int, default=50000, help='the number of RL train epoch')
-    parser.add_argument('--fm_epoch', type=int, default=0, help='the epoch of FM embedding')
+    # parser.add_argument('--epochs', '-me', type=int, default=50000, help='the number of RL train epoch')
+    # parser.add_argument('--fm_epoch', type=int, default=0, help='the epoch of FM embedding')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size.')
     parser.add_argument('--gamma', type=float, default=0.999, help='reward discount factor.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate.')
@@ -397,7 +374,7 @@ def set_arguments():
     parser.add_argument('--max_steps', type=int, default=100, help='max training steps')
     parser.add_argument('--eval_num', type=int, default=10, help='the number of steps to evaluate RL model and metric')
     parser.add_argument('--save_num', type=int, default=10, help='the number of steps to save RL model and metric')
-    parser.add_argument('--observe_num', type=int, default=500, help='the number of steps to print metric')
+    parser.add_argument('--observe_num', type=int, default=1000, help='the number of steps to print metric')
     parser.add_argument('--cand_num', type=int, default=10, help='candidate sampling number')
     parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')
     parser.add_argument('--fix_emb', action='store_false', help='fix embedding or not')
@@ -410,6 +387,7 @@ def set_arguments():
 
 
 if __name__ == '__main__':
+    # Set arguments
     args = set_arguments()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     args.device = torch.device('cuda') if torch.cuda.is_available() else 'cpu'

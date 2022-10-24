@@ -10,7 +10,7 @@ from torch import nn
 from tkinter import _flatten
 from collections import Counter
 class EnumeratedRecommendEnv(object):
-    def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20, mode='train', ask_num=1, entropy_way='weight entropy', fm_epoch=0):
+    def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20, mode='train', ask_num=1, entropy_way='weight entropy'):
         self.data_name = data_name
         self.mode = mode
         self.seed = seed
@@ -87,7 +87,7 @@ class EnumeratedRecommendEnv(object):
         #     'feature_emb': feature_emb
         # }
         #load fm epoch
-        embeds = load_embed(data_name, embed, epoch=fm_epoch)
+        embeds = load_embed(data_name, embed)
         if embeds:
             self.ui_embeds =embeds['ui_emb']
             self.feature_emb = embeds['feature_emb']

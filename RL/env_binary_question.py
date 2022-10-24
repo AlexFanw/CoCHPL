@@ -11,7 +11,7 @@ from collections import Counter
 
 class BinaryRecommendEnv(object):
     def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20,
-                 mode='train', ask_num=1, entropy_way='weight entropy', fm_epoch=0):
+                 mode='train', ask_num=1, entropy_way='weight entropy'):
         self.data_name = data_name
         self.mode = mode
         self.seed = seed
@@ -75,8 +75,8 @@ class BinaryRecommendEnv(object):
         #     'ui_emb': ui_emb,
         #     'feature_emb': feature_emb
         # }
-        # load fm epoch
-        embeds = load_embed(data_name, embed, epoch=fm_epoch)
+        # load TransE Embedding
+        embeds = load_embed(data_name, embed)
         if embeds:
             self.ui_embeds = embeds['ui_emb']
             self.feature_emb = embeds['feature_emb']
@@ -106,6 +106,7 @@ class BinaryRecommendEnv(object):
 
     def __load_rl_data__(self, data_name, mode):
         if mode == 'train':
+            # load the interaction records between User and Item
             with open(os.path.join(DATA_DIR[data_name], 'UI_Interaction_data/review_dict_valid.json'),
                       encoding='utf-8') as f:
                 print('train_data: load RL valid data')
@@ -117,7 +118,9 @@ class BinaryRecommendEnv(object):
                 mydict = json.load(f)
         return mydict
 
-    def __user_dict_init__(self):  # Calculate the weight of the number of interactions per user
+    def __user_dict_init__(self):
+        """Calculate the weight of the number of interactions per user
+        """
         ui_nums = 0
         for items in self.ui_dict.values():
             ui_nums += len(items)

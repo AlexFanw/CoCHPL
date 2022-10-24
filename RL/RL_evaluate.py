@@ -22,7 +22,7 @@ def dqn_evaluate(args, kg, dataset, agent, filename, i_episode):
     test_env = EnvDict[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                        cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num,
                                        mode='test', ask_num=args.ask_num, entropy_way=args.entropy_method,
-                                       fm_epoch=args.fm_epoch)
+                                       )
     set_random_seed(args.seed)
     tt = time.time()
     start = tt
@@ -35,7 +35,6 @@ def dqn_evaluate(args, kg, dataset, agent, filename, i_episode):
     print('User size in UI_test: ', user_size)
     test_filename = 'Evaluate-epoch-{}-'.format(i_episode) + filename
     plot_filename = 'Evaluate-'.format(i_episode) + filename
-    test_name = 0
     if args.data_name in [LAST_FM_STAR, LAST_FM]:
         if args.eval_num == 1:
             test_size = 500
@@ -134,7 +133,7 @@ def dqn_evaluate(args, kg, dataset, agent, filename, i_episode):
                                                                          Rank_mean, reward_mean))
     PATH = TMP_DIR[args.data_name] + '/RL-log-merge/' + test_filename + '.txt'
     with open(PATH, 'a') as f:
-        f.write('Training epocch:{}\n'.format(i_episode))
+        f.write('Training epoch:{}\n'.format(i_episode))
         f.write('===========Test Turn===============\n')
         f.write('Testing {} user tuples\n'.format(user_num))
         for i in range(len(SRturn_all)):
