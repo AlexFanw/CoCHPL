@@ -1,16 +1,12 @@
 import time
-import argparse
 from itertools import count
-import torch.nn as nn
-import torch
 import math
-from collections import namedtuple
-from utils import *
-from RL.env_binary_question import BinaryRecommendEnv
-from RL.env_enumerated_question import EnumeratedRecommendEnv
+from utils.utils import *
+from RL.recommend_env.env_binary_question import BinaryRecommendEnv
+from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
 from tqdm import tqdm
 
-EnvDict = {
+RecommendEnv = {
     LAST_FM: BinaryRecommendEnv,
     LAST_FM_STAR: BinaryRecommendEnv,
     YELP: EnumeratedRecommendEnv,
@@ -19,7 +15,7 @@ EnvDict = {
 
 
 def dqn_evaluate(args, kg, dataset, agent, filename, i_episode):
-    test_env = EnvDict[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
+    test_env = RecommendEnv[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                        cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num,
                                        mode='test', ask_num=args.ask_num, entropy_way=args.entropy_method,
                                        )
@@ -131,7 +127,7 @@ def dqn_evaluate(args, kg, dataset, agent, filename, i_episode):
     print('success turn:{}'.format(SRturn_all))
     print('SR5:{}, SR10:{}, SR15:{}, AvgT:{}, Rank:{}, reward:{}'.format(SR5_mean, SR10_mean, SR15_mean, AvgT_mean,
                                                                          Rank_mean, reward_mean))
-    PATH = TMP_DIR[args.data_name] + '/RL-log-merge/' + test_filename + '.txt'
+    PATH = CHECKPOINT_DIR[args.data_name] + '/log/' + test_filename + '.txt'
     with open(PATH, 'a') as f:
         f.write('Training epoch:{}\n'.format(i_episode))
         f.write('===========Test Turn===============\n')
@@ -139,7 +135,7 @@ def dqn_evaluate(args, kg, dataset, agent, filename, i_episode):
         for i in range(len(SRturn_all)):
             f.write('Testing SR-turn@{}: {}\n'.format(i, SRturn_all[i]))
         f.write('================================\n')
-    PATH = TMP_DIR[args.data_name] + '/RL-log-merge/' + plot_filename + '.txt'
+    PATH = CHECKPOINT_DIR[args.data_name] + '/log/' + plot_filename + '.txt'
     with open(PATH, 'a') as f:
         f.write('{}\t{}\t{}\t{}\t{}\n'.format(i_episode, SR15_mean, AvgT_mean, Rank_mean, reward_mean))
 

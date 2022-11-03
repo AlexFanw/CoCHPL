@@ -1,3 +1,0 @@
-2
-purchase	0
-belong_to	1

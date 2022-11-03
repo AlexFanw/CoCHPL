@@ -1,33 +1,26 @@
 
 import math
-import random
+
 import numpy as np
-import os
-import sys
+import torch
 from tqdm import tqdm
 # sys.path.append('..')
 
-from collections import namedtuple
 import argparse
-from itertools import count, chain
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from utils import *
-from sum_tree import SumTree
+from itertools import count
+from utils.utils import *
 
 #TODO select env
-from RL.env_binary_question import BinaryRecommendEnv
-from RL.env_enumerated_question import EnumeratedRecommendEnv
-from RL.RL_evaluate import dqn_evaluate
-from RL_model import Agent, ReplayMemoryPER
-from gcn import GraphEncoder
+from RL.recommend_env.env_binary_question import BinaryRecommendEnv
+from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
+from RL.RL_model import Agent, ReplayMemoryPER
+from graph.gcn import GraphEncoder
 import time
 import warnings
 
+
 warnings.filterwarnings("ignore")
-EnvDict = {
+RecommendEnv = {
     LAST_FM: BinaryRecommendEnv,
     LAST_FM_STAR: BinaryRecommendEnv,
     YELP: EnumeratedRecommendEnv,
@@ -43,7 +36,7 @@ FeatureDict = {
 
 
 def evaluate(args, kg, dataset, filename):
-    test_env = EnvDict[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
+    test_env = RecommendEnv[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                        cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num, mode='test', ask_num=args.ask_num, entropy_way=args.entropy_method,
                                        )
     set_random_seed(args.seed)
@@ -68,7 +61,7 @@ def evaluate(args, kg, dataset, filename):
     print('User size in UI_test: ', user_size)
     test_filename = 'Evaluate-epoch-{}-'.format(args.load_rl_epoch) + filename
 
-    for user_num in tqdm(range(user_size)):  #user_size
+    for user_num in tqdm(range(user_size)):  # user_size
         # TODO uncommend this line to print the dialog process
         blockPrint()
         print('\n================test tuple:{}===================='.format(user_num))
@@ -97,8 +90,10 @@ def evaluate(args, kg, dataset, filename):
                         SR15 += 1
                     else:
                         SR15 += 1
+                    # HDCG
                     Rank += (1/math.log(t+3,2) + (1/math.log(t+2,2)-1/math.log(t+3,2))/math.log(done+1,2))
                 else:
+                    # HDCG
                     Rank += 0
                 AvgT += t+1
                 break
@@ -136,7 +131,7 @@ def evaluate(args, kg, dataset, filename):
         SRturn_all[i] = np.mean(np.array([item[i] for item in turn_result]))
     print('success turn:{}'.format(SRturn_all))
     print('SR5:{}, SR10:{}, SR15:{}, AvgT:{}, Rank:{}'.format(SR5_mean, SR10_mean, SR15_mean, AvgT_mean, Rank_mean))
-    PATH = TMP_DIR[args.data_name] + '/RL-log-merge/' + test_filename + '.txt'
+    PATH = CHECKPOINT_DIR[args.data_name] + '/log/' + test_filename + '.txt'
     with open(PATH, 'a') as f:
         #f.write('Training epocch:{}\n'.format(i_episode))
         f.write('===========Test Turn===============\n')
@@ -197,7 +192,7 @@ def main():
     print('args.entropy_method:', args.entropy_method)
 
     dataset = load_dataset(args.data_name)
-    filename = 'train-data-{}-RL-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
+    filename = 'train-datasets-{}-RL-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
         args.data_name, args.cand_num, args.cand_item_num, args.embed, args.seq, args.gcn)
     evaluate(args, kg, dataset, filename)
 
