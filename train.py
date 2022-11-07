@@ -1,8 +1,9 @@
 import os
 import torch
 
-from RL.RL_model import set_arguments, FeatureDict, train
+from RL.agent.agent import set_arguments, FeatureDict, train
 from utils.utils import load_kg, load_dataset
+
 
 if __name__ == '__main__':
     # Set arguments

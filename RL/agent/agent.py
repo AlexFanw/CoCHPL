@@ -5,17 +5,17 @@ import argparse
 from itertools import count, chain
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-from utils.utils import *
-from RL.sum_tree import SumTree
 
+from RL.network_dueling_Q import DuelingQNetwork
+from RL.RL_memory import ReplayMemoryPER
+from utils.utils import *
 from RL.recommend_env.env_binary_question import BinaryRecommendEnv
 from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
 from RL.RL_evaluate import dqn_evaluate
 from graph.gcn import GraphEncoder
 import warnings
-
 warnings.filterwarnings("ignore")
+
 RecommendEnv = {
     LAST_FM: BinaryRecommendEnv,
     LAST_FM_STAR: BinaryRecommendEnv,
@@ -32,93 +32,8 @@ FeatureDict = {
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'next_cand'))
 
-
-class ReplayMemoryPER(object):
-    """Prioritized Experience Replay
-
-    """
-    # stored as ( s, a, r, s_ ) in SumTree
-    def __init__(self, capacity, a=0.6, e=0.01):
-        self.tree = SumTree(capacity)
-        self.capacity = capacity
-        self.prio_max = 0.1
-        self.a = a
-        self.e = e
-        self.beta = 0.4
-        self.beta_increment_per_sampling = 0.001
-
-    def push(self, *args):
-        data = Transition(*args)
-        p = (np.abs(self.prio_max) + self.e) ** self.a  # proportional priority
-        self.tree.add(p, data)
-
-    def sample(self, batch_size):
-        batch_data = []
-        idxs = []
-        segment = self.tree.total() / batch_size
-        priorities = []
-
-        for i in range(batch_size):
-            a = segment * i
-            b = segment * (i + 1)
-            s = random.uniform(a, b)
-            idx, p, data = self.tree.get(s)
-
-            batch_data.append(data)
-            priorities.append(p)
-            idxs.append(idx)
-
-        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
-
-        sampling_probabilities = priorities / self.tree.total()
-        is_weight = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
-        is_weight /= is_weight.max()
-
-        return idxs, batch_data, is_weight
-
-    def update(self, idxs, errors):
-        self.prio_max = max(self.prio_max, max(np.abs(errors)))
-        for i, idx in enumerate(idxs):
-            p = (np.abs(errors[i]) + self.e) ** self.a
-            self.tree.update(idx, p)
-
-    def __len__(self):
-        return self.tree.n_entries
-
-
-class DQN(nn.Module):
-    def __init__(self, state_size, action_size, hidden_size=100):
-        super(DQN, self).__init__()
-        # V(s)
-        self.fc2_value = nn.Linear(hidden_size, hidden_size)
-        self.out_value = nn.Linear(hidden_size, 1)
-        # Q(s,a)
-        self.fc2_advantage = nn.Linear(hidden_size + action_size, hidden_size)
-        self.out_advantage = nn.Linear(hidden_size, 1)
-
-    def forward(self, x, y, choose_action=True):
-        """
-        :param x: encode history [N*L*D]; y: action embedding [N*K*D]
-        :return: v: action score [N*K]
-        """
-        # V(s)
-        value = self.out_value(F.relu(self.fc2_value(x))).squeeze(dim=2)  # [N*1*1]
-        # Q(s,a)
-        if choose_action:
-            x = x.repeat(1, y.size(1), 1)
-        state_cat_action = torch.cat((x, y), dim=2)
-        advantage = self.out_advantage(F.relu(self.fc2_advantage(state_cat_action))).squeeze(dim=2)  # [N*K]
-
-        if choose_action:
-            qsa = advantage + value - advantage.mean(dim=1, keepdim=True)
-        else:
-            qsa = advantage + value
-
-        return qsa
-
-
 class Agent(object):
-    def __init__(self, device, memory, state_size, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
+    def __init__(self, device, memory, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
                  PADDING_ID, EPS_START=0.9, EPS_END=0.1, EPS_DECAY=0.0001, tau=0.01):
         self.EPS_START = EPS_START
         self.EPS_END = EPS_END
@@ -126,8 +41,8 @@ class Agent(object):
         self.steps_done = 0
         self.device = device
         self.gcn_net = gcn_net
-        self.policy_net = DQN(state_size, action_size, hidden_size).to(device)
-        self.target_net = DQN(state_size, action_size, hidden_size).to(device)
+        self.policy_net = DuelingQNetwork(action_size, hidden_size).to(device)
+        self.target_net = DuelingQNetwork(action_size, hidden_size).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         self.optimizer = optim.Adam(chain(self.policy_net.parameters(), self.gcn_net.parameters()), lr=learning_rate,
@@ -145,6 +60,9 @@ class Agent(object):
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
         self.steps_done += 1
+        '''
+        Greedy soft policy
+        '''
         if is_test or sample > eps_threshold:
             if is_test and (len(action_space[1]) <= 10 or is_last_turn):
                 return torch.tensor(action_space[1][0], device=self.device, dtype=torch.long), action_space[1]
@@ -161,8 +79,8 @@ class Agent(object):
 
     def update_target_model(self):
         # soft assign
-        for target_param, param in zip(self.target_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(self.tau * param.data + target_param.data * (1.0 - self.tau))
+        for target_param, policy_param in zip(self.target_net.parameters(), self.policy_net.parameters()):
+            target_param.data.copy_(self.tau * policy_param.data + target_param.data * (1.0 - self.tau))
 
     def optimize_model(self, BATCH_SIZE, GAMMA):
         if len(self.memory) < BATCH_SIZE:
@@ -189,23 +107,26 @@ class Agent(object):
         next_cand_batch = self.padding(n_cands)
         next_cand_emb_batch = self.gcn_net.embedding(next_cand_batch)
 
-        q_eval = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False)
-
-        # Double DQN
-        best_actions = torch.gather(input=next_cand_batch, dim=1,
+        '''
+        Double DQN
+        Q_policy - GAMMA * (r + max Q_target(next))
+        '''
+        q_policy = self.policy_net(state_emb_batch, action_emb_batch)
+        
+        best_next_actions = torch.gather(input=next_cand_batch, dim=1,
                                     index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(dim=1).view(
                                         len(n_states), 1).to(self.device))
-        best_actions_emb = self.gcn_net.embedding(best_actions)
+        best_next_actions_emb = self.gcn_net.embedding(best_next_actions)
         q_target = torch.zeros((BATCH_SIZE, 1), device=self.device)
-        q_target[non_final_mask] = self.target_net(next_state_emb_batch, best_actions_emb, choose_action=False).detach()
+        q_target[non_final_mask] = self.target_net(next_state_emb_batch, best_next_actions_emb).detach()
         q_target = reward_batch + GAMMA * q_target
 
         # prioritized experience replay
-        errors = (q_eval - q_target).detach().cpu().squeeze().tolist()
+        errors = (q_policy - q_target).detach().cpu().squeeze().tolist()
         self.memory.update(idxs, errors)
 
         # mean squared error loss to minimize
-        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_eval, q_target)).mean()
+        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_policy, q_target)).mean()
         self.optimizer.zero_grad()
         loss.backward()
         for param in self.policy_net.parameters():
@@ -234,7 +155,6 @@ class Agent(object):
             padded_cand.append(new_c)
         return torch.LongTensor(padded_cand).to(self.device)
 
-
 def train(args, kg, dataset, filename):
     """RL Model Train
 
@@ -259,7 +179,7 @@ def train(args, kg, dataset, filename):
     # Memory
     memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Recommendation Agent
-    agent = Agent(device=args.device, memory=memory, state_size=args.hidden, action_size=embed.size(1),
+    agent = Agent(device=args.device, memory=memory, action_size=embed.size(1),
                   hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm,
                   PADDING_ID=embed.size(0) - 1)
 

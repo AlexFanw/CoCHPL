@@ -1,8 +1,6 @@
 
 import math
 
-import numpy as np
-import torch
 from tqdm import tqdm
 # sys.path.append('..')
 
@@ -13,7 +11,7 @@ from utils.utils import *
 #TODO select env
 from RL.recommend_env.env_binary_question import BinaryRecommendEnv
 from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
-from RL.RL_model import Agent, ReplayMemoryPER
+from RL.agent.agent import Agent, ReplayMemoryPER
 from graph.gcn import GraphEncoder
 import time
 import warnings
@@ -44,7 +42,7 @@ def evaluate(args, kg, dataset, filename):
     embed = torch.FloatTensor(np.concatenate((test_env.ui_embeds, test_env.feature_emb, np.zeros((1,test_env.ui_embeds.shape[1]))), axis=0))
     gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg, embeddings=embed,
                            fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
-    agent = Agent(device=args.device, memory=memory, state_size=args.hidden, action_size=embed.size(1),
+    agent = Agent(device=args.device, memory=memory, action_size=embed.size(1),
                   hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm, PADDING_ID=embed.size(0)-1)
     print('Staring loading rl model in epoch {}'.format(args.load_rl_epoch))
     agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
