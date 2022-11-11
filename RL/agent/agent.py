@@ -111,14 +111,14 @@ class Agent(object):
         Double DQN
         Q_policy - GAMMA * (r + max Q_target(next))
         '''
-        q_policy = self.policy_net(state_emb_batch, action_emb_batch)
+        q_policy = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False)
         
         best_next_actions = torch.gather(input=next_cand_batch, dim=1,
                                     index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(dim=1).view(
                                         len(n_states), 1).to(self.device))
         best_next_actions_emb = self.gcn_net.embedding(best_next_actions)
         q_target = torch.zeros((BATCH_SIZE, 1), device=self.device)
-        q_target[non_final_mask] = self.target_net(next_state_emb_batch, best_next_actions_emb).detach()
+        q_target[non_final_mask] = self.target_net(next_state_emb_batch, best_next_actions_emb, choose_action=False).detach()
         q_target = reward_batch + GAMMA * q_target
 
         # prioritized experience replay
@@ -193,8 +193,8 @@ def train(args, kg, dataset, filename):
     if args.eval_num == 1:
         SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, 0)
         test_performance.append(SR15_mean)
-    for train_step in range(1 + args.load_rl_epoch, args.max_steps + 1):
-        print(">>>Train Step: {}, Total: {}".format(train_step, args.max_steps))
+    for train_step in range(1 + args.load_rl_epoch, args.max_epoch + 1):
+        print(">>>Train Step: {}, Total: {}".format(train_step, args.max_epoch))
         SR5, SR10, SR15, AvgT, Rank, total_reward = 0., 0., 0., 0., 0., 0.
         loss = torch.tensor(0, dtype=torch.float, device=args.device)
         for i_episode in tqdm(range(args.sample_times), desc='sampling'):
@@ -212,7 +212,13 @@ def train(args, kg, dataset, filename):
             for t in count():  # user  dialog
                 if t == 14:
                     is_last_turn = True
+                '''
+                Select Action
+                '''
                 action, sorted_actions = agent.select_action(state, cand, action_space, is_last_turn=is_last_turn)
+                '''
+                Env Interaction
+                '''
                 if not args.fix_emb:
                     next_state, next_cand, action_space, reward, done = env.step(action.item(), sorted_actions,
                                                                                  agent.gcn_net.embedding.weight.data.cpu().detach().numpy())
@@ -287,8 +293,8 @@ def set_arguments():
     parser.add_argument('--ask_num', type=int, default=1, help='the number of features asked in a turn')
     parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading RL model')
 
-    parser.add_argument('--sample_times', type=int, default=100, help='the epoch of sampling')
-    parser.add_argument('--max_steps', type=int, default=100, help='max training steps')
+    parser.add_argument('--sample_times', type=int, default=100, help='the episodes of sampling')
+    parser.add_argument('--max_epoch', type=int, default=100, help='max training epoch')
     parser.add_argument('--eval_num', type=int, default=10, help='the number of steps to evaluate RL model and metric')
     parser.add_argument('--save_num', type=int, default=10, help='the number of steps to save RL model and metric')
     parser.add_argument('--observe_num', type=int, default=1000, help='the number of steps to print metric')

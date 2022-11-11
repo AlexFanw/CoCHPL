@@ -165,7 +165,7 @@ def main():
     parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading RL model')
 
     parser.add_argument('--sample_times', type=int, default=100, help='the epoch of sampling')
-    parser.add_argument('--max_steps', type=int, default=100, help='max training steps')
+    parser.add_argument('--max_epoch', type=int, default=100, help='max training steps')
     parser.add_argument('--eval_num', type=int, default=10, help='the number of epochs to save RL model and metric')
     parser.add_argument('--cand_num', type=int, default=10, help='candidate sampling number')
     parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')

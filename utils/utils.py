@@ -84,15 +84,15 @@ def load_embed(dataset, embed):
         return embeds
 
 
-def load_rl_agent(dataset, filename, epoch_user):
-    model_file = CHECKPOINT_DIR[dataset] + '/model/' + filename + '-epoch-{}.pkl'.format(epoch_user)
+def load_rl_agent(dataset, filename, epoch_user, agent=""):
+    model_file = CHECKPOINT_DIR[dataset] + '/model/' + agent + '-' + filename + '-epoch-{}.pkl'.format(epoch_user)
     model_dict = torch.load(model_file)
     print('RL policy model load at {}'.format(model_file))
     return model_dict
 
 
-def save_rl_agent(dataset, model, filename, epoch_user):
-    model_file = CHECKPOINT_DIR[dataset] + '/model/' + filename + '-epoch-{}.pkl'.format(epoch_user)
+def save_rl_agent(dataset, model, filename, epoch_user, agent=""):
+    model_file = CHECKPOINT_DIR[dataset] + '/model/' + agent + '-' + filename + '-epoch-{}.pkl'.format(epoch_user)
     if not os.path.isdir(CHECKPOINT_DIR[dataset] + '/model/'):
         os.makedirs(CHECKPOINT_DIR[dataset] + '/model/')
     torch.save(model, model_file)

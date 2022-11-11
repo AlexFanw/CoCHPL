@@ -8,10 +8,11 @@ from collections import Counter
 
 class VariableRecommendEnv(object):
     def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20,
-                 mode='train', ask_num=1, entropy_way='weight entropy'):
+                 mode='train', ask_num=1, entropy_way='weight entropy', max_step=50):
         self.data_name = data_name
         self.mode = mode
         self.seed = seed
+        self.max_step = max_step
         self.max_turn = max_turn  # MAX_TURN
         self.attr_state_num = attr_num
         self.kg = kg
@@ -50,6 +51,7 @@ class VariableRecommendEnv(object):
         self.user_id = None
         self.target_item = None
         self.cur_conver_step = 0  # the number of conversation in current step
+        self.cur_conver_turn = 0  # the number of conversation in current turn
         self.cur_node_set = []  # maybe a node or a node set  /   normally save feature node
         # state veactor
         self.user_embed = None
@@ -141,6 +143,7 @@ class VariableRecommendEnv(object):
             self.feature_emb = embed[self.user_length + self.item_length:]
         # init  user_id  item_id  cur_step   cur_node_set
         self.cur_conver_step = 0  # reset cur_conversation step
+        self.cur_conver_turn = 0
         self.cur_node_set = []
         if self.mode == 'train':
             users = list(self.user_weight_dict.keys())
@@ -162,7 +165,7 @@ class VariableRecommendEnv(object):
 
         # init state vector
         self.user_embed = self.ui_embeds[self.user_id].tolist()  # init user_embed   np.array---list
-        self.conver_his = [0] * self.max_turn  # conversation_history
+        self.conver_his = [0] * self.max_step  # conversation_history
         self.attr_ent = [0] * self.attr_state_num  # attribute entropy
 
         # initialize dialog by randomly asked a question from ui interaction
@@ -174,6 +177,7 @@ class VariableRecommendEnv(object):
         self._updata_reachable_feature()  # self.reachable_feature = []
         self.conver_his[self.cur_conver_step] = self.history_dict['ask_suc']
         self.cur_conver_step += 1
+        self.cur_conver_turn += 1
 
         print('=== init user prefer feature: {}'.format(self.cur_node_set))
         self._update_feature_entropy()  # update entropy
@@ -207,12 +211,12 @@ class VariableRecommendEnv(object):
                 random.sample(self.cand_items, min(len(self.cand_items), self.cand_item_num)), 'item')
         else:
             cand_item = self._map_to_all_id(self.cand_items[:self.cand_item_num], 'item')
-        cand = cand_feature + cand_item
+        cand = {"feature": cand_feature, "item": cand_item}
         return cand
 
     def _get_action_space(self):
-        action_space = [self._map_to_all_id(self.reachable_feature, 'feature'),
-                        self._map_to_all_id(self.cand_items, 'item')]
+        action_space = {"feature": self._map_to_all_id(self.reachable_feature, 'feature'),
+                        "item": self._map_to_all_id(self.cand_items, 'item')}
         return action_space
 
     def _get_state(self):
@@ -267,37 +271,42 @@ class VariableRecommendEnv(object):
         if embed is not None:
             self.ui_embeds = embed[:self.user_length + self.item_length]
             self.feature_emb = embed[self.user_length + self.item_length:]
-
         done = 0
-        print('---------------step:{}-------------'.format(self.cur_conver_step))
+        print('***turn:{}'.format(self.cur_conver_turn), '***step:{}'.format(self.cur_conver_step))
 
-        if self.cur_conver_step == self.max_turn:
+        if self.cur_conver_turn == self.max_turn or self.cur_conver_step == self.max_step:
             reward = self.reward_dict['until_T']
             self.conver_his[self.cur_conver_step - 1] = self.history_dict['until_T']
-            print('--> Maximum number of turns reached !')
+            print('--> Maximum number of turns/steps reached !')
             done = 1
-        elif action >= self.user_length + self.item_length:  # ask feature
+        # ASK
+        elif action >= self.user_length + self.item_length:
             asked_feature = self._map_to_old_id(action)
             print('-->action: ask features {}, max entropy feature {}'.format(asked_feature,
                                                                               self.reachable_feature[:self.cand_num]))
             reward, done, acc_rej = self._ask_update(
                 asked_feature)  # update user's profile:  user_acc_feature & user_rej_feature
             self._update_cand_items(asked_feature, acc_rej)  # update cand_items
-        else:  # recommend items
+        # RECOMMEND
+        else:
 
             # ===================== rec update=========
             recom_items = []
-            for act in sorted_actions:
-                if act < self.user_length + self.item_length:
-                    recom_items.append(self._map_to_old_id(act))
-                    if len(recom_items) == self.rec_num:
-                        break
+            # for act in sorted_actions:
+            if action < self.user_length + self.item_length:
+                recom_items.append(self._map_to_old_id(action))
             reward, done = self._recommend_update(recom_items)
             # ========================================
             if reward > 0:
                 print('-->Recommend successfully!')
             else:
                 print('-->Recommend fail !')
+
+        if len(sorted_actions) == 1 and done != 1:
+            reward = self.reward_dict['until_T']
+            self.conver_his[self.cur_conver_step - 1] = self.history_dict['until_T']
+            print('-No More Candidate- !')
+            done = 1
 
         self._updata_reachable_feature()  # update user's profile: reachable_feature
 
@@ -431,6 +440,7 @@ class VariableRecommendEnv(object):
             done = recom_items.index(self.target_item) + 1
         else:
             reward = self.reward_dict['rec_fail']
+            # print(len(self.conver_his), self.cur_conver_step)
             self.conver_his[self.cur_conver_step] = self.history_dict['rec_fail']  # update state vector: conver_his
             if len(self.cand_items) > self.rec_num:
                 for item in recom_items:
