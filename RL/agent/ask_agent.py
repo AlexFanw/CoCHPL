@@ -42,7 +42,6 @@ class AskAgent(object):
         self.EPS_START = EPS_START
         self.EPS_END = EPS_END
         self.EPS_DECAY = EPS_DECAY
-        self.steps_done = 0
         self.device = device
         # GCN+Transformer Embedding
         self.gcn_net = gcn_net
@@ -68,32 +67,24 @@ class AskAgent(object):
         self.PADDING_ID = PADDING_ID
         self.tau = tau
 
-    def select_action(self, state, cand, action_space, is_test=False, is_last_turn=False):
+    def select_action(self, state, cand_features, features_space, is_test=False):
         state_emb = self.gcn_net([state])
-        cand = torch.LongTensor([cand]).to(self.device)
-        cand_emb = self.gcn_net.embedding(cand)
+        cand_features = torch.LongTensor([cand_features]).to(self.device)
+        cand_emb = self.gcn_net.embedding(cand_features)
         sample = random.random()
-        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
-                        math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        self.steps_done += 1
+        eps_threshold = self.EPS_END
         '''
-        Greedy soft policy
+        Greedy Soft Policy
         '''
-        # if len(cand[0]) == 0:
-        #     return torch.tensor(-1, device=self.device, dtype=torch.long), action_space
         if is_test or sample > eps_threshold:
-            # if is_test and (len(action_space[1]) <= 10 or is_last_turn):
-            #     return torch.tensor(action_space[1][0], device=self.device, dtype=torch.long), action_space[1]
             with torch.no_grad():
                 actions_value = self.policy_net(state_emb, cand_emb)
-                print(sorted(list(zip(cand[0].tolist(), actions_value[0].tolist())), key=lambda x: x[1], reverse=True))
-                action = cand[0][actions_value.argmax().item()]
-                sorted_actions = cand[0][actions_value.sort(1, True)[1].tolist()]
-                return action, sorted_actions.tolist()
+                chosen_feature = cand_features[0][actions_value.argmax().item()]
+                return chosen_feature
         else:
-            shuffled_cand = action_space
+            shuffled_cand = features_space
             random.shuffle(shuffled_cand)
-            return torch.tensor(shuffled_cand[0], device=self.device, dtype=torch.long), shuffled_cand
+            return torch.tensor(shuffled_cand[0], device=self.device, dtype=torch.long)
 
     def update_target_model(self):
         # soft assign
@@ -111,9 +102,7 @@ class AskAgent(object):
 
         state_emb_batch = self.gcn_net(list(batch.state))
         action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(self.device)  # [N*1]
-        # print(action_batch.size())
-        # print(action_batch.max())
-        # print(action_batch.min())
+
         action_emb_batch = self.gcn_net.embedding(action_batch)
         reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).to(self.device)
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,

@@ -49,11 +49,11 @@ class BinaryRecommendEnv(object):
         # user_id  item_id   cur_step   cur_node_set
         self.user_id = None
         self.target_item = None
-        self.cur_conver_step = 0  # the number of conversation in current step
+        # self.cur_conver_step = 0  # the number of conversation in current step
         self.cur_node_set = []  # maybe a node or a node set  /   normally save feature node
         # state veactor
         self.user_embed = None
-        self.conver_his = []  # conversation_history
+        # # self.conver_his = []  # conversation_history
         self.attr_ent = []  # attribute entropy
 
         self.ui_dict = self.__load_rl_data__(data_name, mode=mode)  # np.array [ u i weight]
@@ -162,7 +162,7 @@ class BinaryRecommendEnv(object):
 
         # init state vector
         self.user_embed = self.ui_embeds[self.user_id].tolist()  # init user_embed   np.array---list
-        self.conver_his = [0] * self.max_turn  # conversation_history
+        # self.conver_his = [0] * self.max_turn  # conversation_history
         self.attr_ent = [0] * self.attr_state_num  # attribute entropy
 
         # initialize dialog by randomly asked a question from ui interaction
@@ -172,7 +172,7 @@ class BinaryRecommendEnv(object):
         self.cur_node_set.append(user_like_random_fea)
         self._update_cand_items(user_like_random_fea, acc_rej=True)
         self._updata_reachable_feature()  # self.reachable_feature = []
-        self.conver_his[self.cur_conver_step] = self.history_dict['ask_suc']
+        # self.conver_his[self.cur_conver_step] = self.history_dict['ask_suc']
         self.cur_conver_step += 1
 
         print('=== init user prefer feature: {}'.format(self.cur_node_set))
@@ -273,7 +273,7 @@ class BinaryRecommendEnv(object):
 
         if self.cur_conver_step == self.max_turn:
             reward = self.reward_dict['until_T']
-            self.conver_his[self.cur_conver_step - 1] = self.history_dict['until_T']
+            # self.conver_his[self.cur_conver_step - 1] = self.history_dict['until_T']
             print('--> Maximum number of turns reached !')
             done = 1
         elif action >= self.user_length + self.item_length:  # ask feature
@@ -384,12 +384,12 @@ class BinaryRecommendEnv(object):
             self.user_acc_feature.append(asked_feature)
             self.cur_node_set.append(asked_feature)
             reward = self.reward_dict['ask_suc']
-            self.conver_his[self.cur_conver_step] = self.history_dict['ask_suc']  # update conver_his
+            # self.conver_his[self.cur_conver_step] = self.history_dict['ask_suc']  # update conver_his
         else:
             acc_rej = False
             self.user_rej_feature.append(asked_feature)
             reward = self.reward_dict['ask_fail']
-            self.conver_his[self.cur_conver_step] = self.history_dict['ask_fail']  # update conver_his
+            # self.conver_his[self.cur_conver_step] = self.history_dict['ask_fail']  # update conver_his
 
         if self.cand_items == []:  # candidate items is empty
             done = 1
@@ -421,7 +421,7 @@ class BinaryRecommendEnv(object):
         # recom_items = self.cand_items[: self.rec_num]    # TOP k item to recommend
         if self.target_item in recom_items:
             reward = self.reward_dict['rec_suc']
-            self.conver_his[self.cur_conver_step] = self.history_dict['rec_scu']  # update state vector: conver_his
+            # self.conver_his[self.cur_conver_step] = self.history_dict['rec_scu']  # update state vector: conver_his
             tmp_score = []
             for item in recom_items:
                 idx = self.cand_items.index(item)
@@ -431,7 +431,7 @@ class BinaryRecommendEnv(object):
             done = recom_items.index(self.target_item) + 1
         else:
             reward = self.reward_dict['rec_fail']
-            self.conver_his[self.cur_conver_step] = self.history_dict['rec_fail']  # update state vector: conver_his
+            # self.conver_his[self.cur_conver_step] = self.history_dict['rec_fail']  # update state vector: conver_his
             if len(self.cand_items) > self.rec_num:
                 for item in recom_items:
                     del self.item_feature_pair[item]

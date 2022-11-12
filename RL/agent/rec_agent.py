@@ -38,18 +38,18 @@ Transition = namedtuple('Transition',
 
 class RecAgent(object):
     def __init__(self, device, memory, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
-                 PADDING_ID, value_net, EPS_START=0.9, EPS_END=0.1, EPS_DECAY=0.0001, tau=0.01):
+                 PADDING_ID, EPS_START=0.9, EPS_END=0.1, EPS_DECAY=0.0001, tau=0.01):
         self.EPS_START = EPS_START
         self.EPS_END = EPS_END
         self.EPS_DECAY = EPS_DECAY
-        self.steps_done = 0
         self.device = device
         # GCN+Transformer Embedding
         self.gcn_net = gcn_net
-        # Termination Network
-        self.termination_net = TerminationNetwork(action_size, hidden_size)
-        # Value Network
-        self.value_net = value_net
+        # self.ask_agent = ask_agent
+        # # Termination Network
+        # # self.termination_net = TerminationNetwork(action_size, hidden_size)
+        # # Value Network
+        # self.value_net = value_net
         # Action Select
         self.policy_net = DuelingQNetwork(action_size, hidden_size).to(device)
         self.target_net = DuelingQNetwork(action_size, hidden_size).to(device)
@@ -58,9 +58,7 @@ class RecAgent(object):
 
         # Optimizer
         self.optimizer = optim.Adam(chain(self.policy_net.parameters(),
-                                          self.gcn_net.parameters(),
-                                          self.termination_net.parameters(),
-                                          self.value_net.parameters()),
+                                          self.gcn_net.parameters()),
                                     lr=learning_rate,
                                     weight_decay=l2_norm)
         self.memory = memory
@@ -68,32 +66,25 @@ class RecAgent(object):
         self.PADDING_ID = PADDING_ID
         self.tau = tau
 
-    def select_action(self, state, cand, action_space, is_test=False, is_last_turn=False):
+    def select_action(self, state, cand_items, items_space, is_test=False):
         state_emb = self.gcn_net([state])
-        cand = torch.LongTensor([cand]).to(self.device)
-        cand_emb = self.gcn_net.embedding(cand)
+        cand_items = torch.LongTensor([cand_items]).to(self.device)
+        cand_emb = self.gcn_net.embedding(cand_items)
         sample = random.random()
-        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
-                        math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        self.steps_done += 1
+        eps_threshold = self.EPS_END
         '''
         Greedy soft policy
         '''
-        # if len(cand[0]) == 0:
-        #     return torch.tensor(-1, device=self.device, dtype=torch.long), action_space
         if is_test or sample > eps_threshold:
-            # if is_test and (len(action_space[1]) <= 10 or is_last_turn):
-            #     return torch.tensor(action_space[1][0], device=self.device, dtype=torch.long), action_space[1]
             with torch.no_grad():
                 actions_value = self.policy_net(state_emb, cand_emb)
-                print(sorted(list(zip(cand[0].tolist(), actions_value[0].tolist())), key=lambda x: x[1], reverse=True))
-                action = cand[0][actions_value.argmax().item()]
-                sorted_actions = cand[0][actions_value.sort(1, True)[1].tolist()]
-                return action, sorted_actions.tolist()
+                print(actions_value.sort(1, True)[1].tolist())
+                sorted_actions = cand_items[0][actions_value.sort(1, True)[1].tolist()]
+                return sorted_actions.tolist()
         else:
-            shuffled_cand = action_space
+            shuffled_cand = items_space
             random.shuffle(shuffled_cand)
-            return torch.tensor(shuffled_cand[0], device=self.device, dtype=torch.long), shuffled_cand
+            return shuffled_cand
 
     def update_target_model(self):
         # soft assign
@@ -127,21 +118,19 @@ class RecAgent(object):
 
         '''
         Double DQN
-        Q_policy - (r + GAMMA * [max Q_target(next) (1-termination) + Value (termination)])
+        Q_policy - (r + GAMMA * max Q_target(next))
         '''
         q_policy = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False)
 
         best_next_actions = torch.gather(input=next_cand_batch, dim=1,
-                                         index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(
-                                             dim=1).view(
-                                             len(n_states), 1).to(self.device))
+                                         index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).
+                                         argmax(dim=1).view(len(n_states), 1).to(self.device))
         best_next_actions_emb = self.gcn_net.embedding(best_next_actions)
         q_target = torch.zeros((BATCH_SIZE, 1), device=self.device)
-        q_target[non_final_mask] = self.target_net(next_state_emb_batch, best_next_actions_emb,
+        q_target[non_final_mask] = self.target_net(next_state_emb_batch,
+                                                   best_next_actions_emb,
                                                    choose_action=False).detach()
-        term = self.termination_net(state_emb_batch, action_emb_batch)
-        value = self.value_net(state_emb_batch, action_emb_batch)
-        q_target = reward_batch + GAMMA * ((1-term) * q_target + term * value)
+        q_target = reward_batch + GAMMA * q_target
 
         # prioritized experience replay
         errors = (q_policy - q_target).detach().cpu().squeeze().tolist()
@@ -160,14 +149,12 @@ class RecAgent(object):
     def save_model(self, data_name, filename, epoch_user):
         save_rl_agent(dataset=data_name,
                       model={'policy': self.policy_net.state_dict(),
-                             'gcn': self.gcn_net.state_dict(),
-                             'termination': self.gcn_net.state_dict()},
+                             'gcn': self.gcn_net.state_dict()},
                       filename=filename, epoch_user=epoch_user, agent='rec')
 
     def load_model(self, data_name, filename, epoch_user):
         model_dict = load_rl_agent(dataset=data_name, filename=filename, epoch_user=epoch_user, agent='rec')
         self.policy_net.load_state_dict(model_dict['policy'])
-        self.termination_net.load_state_dict(model_dict['termination'])
 
     def padding(self, cand):
         pad_size = max([len(c) for c in cand])

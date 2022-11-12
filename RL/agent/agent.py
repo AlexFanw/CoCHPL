@@ -198,7 +198,7 @@ def train(args, kg, dataset, filename):
         SR5, SR10, SR15, AvgT, Rank, total_reward = 0., 0., 0., 0., 0., 0.
         loss = torch.tensor(0, dtype=torch.float, device=args.device)
         for i_episode in tqdm(range(args.sample_times), desc='sampling'):
-            blockPrint()
+            # blockPrint()
             print('\n================new tuple:{}===================='.format(i_episode))
             if not args.fix_emb:
                 # Reset environment and record the starting state
@@ -251,6 +251,8 @@ def train(args, kg, dataset, filename):
                             SR15 += 1
                         Rank += (1 / math.log(t + 3, 2) + (1 / math.log(t + 2, 2) - 1 / math.log(t + 3, 2)) / math.log(
                             done + 1, 2))
+                        print((1 / math.log(t + 3, 2) + (1 / math.log(t + 2, 2) - 1 / math.log(t + 3, 2)) / math.log(
+                            done + 1, 2)))
                     else:
                         Rank += 0
                     AvgT += t + 1
