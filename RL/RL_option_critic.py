@@ -7,6 +7,7 @@ import argparse
 from itertools import count, chain
 import torch.nn as nn
 import torch.optim as optim
+import statistics
 
 from RL.agent.ask_agent import AskAgent
 from RL.agent.rec_agent import RecAgent
@@ -20,18 +21,19 @@ from RL.recommend_env.env_variable_question import VariableRecommendEnv
 from RL.RL_evaluate import dqn_evaluate
 from graph.gcn import GraphEncoder
 import warnings
+
 warnings.filterwarnings("ignore")
 
 RecommendEnv = {
     LAST_FM: VariableRecommendEnv,
-    LAST_FM_STAR: BinaryRecommendEnv,
-    YELP: EnumeratedRecommendEnv,
-    YELP_STAR: BinaryRecommendEnv
+    LAST_FM_STAR: VariableRecommendEnv,
+    YELP: EnumeratedRecommendEnv,  # Pending
+    YELP_STAR: VariableRecommendEnv
 }
 FeatureDict = {
     LAST_FM: 'feature',
     LAST_FM_STAR: 'feature',
-    YELP: 'large_feature',
+    YELP: 'large_feature',  # Pending
     YELP_STAR: 'feature'
 }
 
@@ -41,7 +43,7 @@ Transition = namedtuple('Transition',
 
 def choose_option(ask_agent, rec_agent, state, cand):
     if cand["feature"] == [] or len(cand["item"]) < 10:
-        return 0, 1
+        return 0, 1  # Recommend
     with torch.no_grad():
         state_emb = ask_agent.gcn_net([state])
         feature_cand = cand["feature"]
@@ -49,9 +51,11 @@ def choose_option(ask_agent, rec_agent, state, cand):
         for feature in feature_cand:
             feature = torch.LongTensor(np.array(feature).astype(int).reshape(-1, 1)).to(ask_agent.device)  # [N*1]
             feature = ask_agent.gcn_net.embedding(feature)
-            ask_score.append(ask_agent.policy_net(state_emb, feature, choose_action=False).detach().numpy().squeeze())
+            # print(ask_agent.value_net(state_emb))
+            ask_score.append(
+                ask_agent.value_net(state_emb).detach().numpy().squeeze() + ask_agent.policy_net(state_emb, feature,
+                                                                                                 choose_action=False).detach().numpy().squeeze())
         ask_Q = np.array(ask_score).dot(np.exp(ask_score) / sum(np.exp(ask_score)))
-        # print()
 
         state_emb = rec_agent.gcn_net([state])
         item_cand = cand["item"]
@@ -59,9 +63,16 @@ def choose_option(ask_agent, rec_agent, state, cand):
         for item in item_cand:
             item = torch.LongTensor(np.array(item).astype(int).reshape(-1, 1)).to(rec_agent.device)  # [N*1]
             item = rec_agent.gcn_net.embedding(item)
-            rec_score.append(rec_agent.policy_net(state_emb, item, choose_action=False).detach().numpy().squeeze())
+            rec_score.append(
+                rec_agent.value_net(state_emb).detach().numpy().squeeze() + rec_agent.policy_net(state_emb, item,
+                                                                                                 choose_action=False).detach().numpy().squeeze())
+            rec_score.append(
+                rec_agent.value_net(state_emb).detach().numpy().squeeze() + rec_agent.policy_net(state_emb, item,
+                                                                                                 choose_action=False).detach().numpy().squeeze())
         rec_Q = np.array(rec_score).dot(np.exp(rec_score) / sum(np.exp(rec_score)))
-        return math.exp(ask_Q)/(math.exp(ask_Q)+math.exp(rec_Q)), math.exp(rec_Q)/(math.exp(ask_Q)+math.exp(rec_Q))
+        # return ask_Q / (ask_Q + rec_Q), rec_Q / (ask_Q + rec_Q)
+        return math.exp(ask_Q) / (math.exp(ask_Q) + math.exp(rec_Q)), math.exp(rec_Q) / (
+                    math.exp(ask_Q) + math.exp(rec_Q))
 
 
 def option_critic_train(args, kg, dataset, filename):
@@ -82,19 +93,21 @@ def option_critic_train(args, kg, dataset, filename):
                                        entropy_way=args.entropy_method, max_step=args.max_step)
 
     # User&Feature Embedding
-    embed = torch.FloatTensor(np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
+    embed = torch.FloatTensor(
+        np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
 
     '''
     VALUE NET
     '''
-    value_net = ValueNetwork(action_size=embed.size(1)).to(args.device)
+    value_net = ValueNetwork().to(args.device)
     '''
     ASK AGENT
     '''
     # ASK GCN Transformer
     ask_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
                                embeddings=embed,
-                               fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
+                               fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(
+        args.device)
     # Ask Memory
     ask_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Ask Agent
@@ -107,13 +120,14 @@ def option_critic_train(args, kg, dataset, filename):
     # Rec GCN Transformer
     rec_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
                                embeddings=embed,
-                               fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
+                               fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(
+        args.device)
     # Rec Memory
     rec_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Rec Agent
     rec_agent = RecAgent(device=args.device, memory=rec_memory, action_size=embed.size(1),
                          hidden_size=args.hidden, gcn_net=rec_gcn_net, learning_rate=args.learning_rate,
-                         l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1)
+                         l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net)
     # load parameters
     if args.load_rl_epoch != 0:
         print('Loading Model in epoch {}'.format(args.load_rl_epoch))
@@ -128,23 +142,29 @@ def option_critic_train(args, kg, dataset, filename):
     #     SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, 0)
     #     test_performance.append(SR15_mean)
     for epoch in range(1 + args.load_rl_epoch, args.max_epoch + 1):
-        print(">>>Train Step: {}, Total: {}".format(epoch, args.max_epoch))
-        SR5, SR10, SR15, AvgT, Avg_Step, HDCG, total_reward = 0., 0., 0., 0., 0., 0., 0.
-        loss = torch.tensor(0, dtype=torch.float, device=args.device)
+        print("\nEpoch: {}, Total: {}".format(epoch, args.max_epoch))
+        SR5, SR10, SR15, AvgT, HDCG_item, total_reward = 0., 0., 0., 0., 0., 0.
+        rec_step_list = []
+        ask_step_list = []
+        HDCG_attribute_list = []
+        rec_loss = torch.tensor(0, dtype=torch.float, device=args.device)
+        ask_loss = torch.tensor(0, dtype=torch.float, device=args.device)
         for i_episode in tqdm(range(args.sample_times), desc='sampling'):
             blockPrint()
-            print('\n================new tuple:{}===================='.format(i_episode))
+            print('\n================Epoch:{} Episode:{}===================='.format(epoch, i_episode))
             state, cand, action_space = env.reset()
             epi_reward = 0
             done = 0
             for t in range(1, 16):  # Turn
                 '''
-                Select Option
+                Option choose : Select Ask / Rec
                 '''
+                env.cur_conver_step = 1
                 if done:
                     break
-                print(cand)
+                print("Candidate: ", cand)
                 ask_Q, rec_Q = choose_option(ask_agent, rec_agent, state, cand)
+                print(ask_Q, rec_Q)
                 if ask_Q > rec_Q:
                     option = 1
                     print("\n————————Turn: ", t, "  Option: ASK————————")
@@ -153,114 +173,148 @@ def option_critic_train(args, kg, dataset, filename):
                     print("\n————————Turn: ", t, "  Option: REC————————")
 
                 '''
-                Select features / items
+                Intra Option choose: Select features / items
                 '''
                 # ASK
                 if option == 1:
-                    term = False
+                    termination = False
+                    ask_score = []
+                    while not termination and not done:
+                        if env.cur_conver_step > args.max_ask_step:
+                            break
 
-                    while not term and not done:
-                        '''
-                        Select Action
-                        '''
+                        # Select Action
                         chosen_feature = ask_agent.select_action(state, cand["feature"], action_space["feature"])
-                        '''
-                        Env Interaction
-                        '''
+
+                        # Env Interaction
                         next_state, next_cand, action_space, reward, done = env.step(chosen_feature.item(), None)
                         epi_reward += reward
+                        ask_score.append(reward)
                         reward = torch.tensor([reward], device=args.device, dtype=torch.float)
 
                         # Whether Termination
                         next_state_emb = ask_agent.gcn_net([next_state])
-                        next_cand_emb = ask_agent.gcn_net.embedding(torch.LongTensor([next_cand["feature"]]).to(args.device))
-                        term_score = ask_agent.termination_net(next_state_emb, next_cand_emb)
+                        next_cand_emb = ask_agent.gcn_net.embedding(
+                            torch.LongTensor([next_cand["feature"]]).to(args.device))
+                        term_score = rec_agent.termination_net(next_state_emb, next_cand_emb).item()
+                        print("Termination Score:", term_score)
                         if term_score >= 0.5:
-                            term = True
+                            termination = True
                         if next_cand["feature"] == []:
-                            term = True
-                        # ———————————————————
+                            termination = True
 
-                        # if done:
-                        #     next_state = None
+                        # Push memory
+                        if done:
+                            next_state = None
 
-                        ask_agent.memory.push(state, chosen_feature, next_state, reward, next_cand["feature"])
+                        ask_agent.memory.push(state, chosen_feature, next_state, reward,
+                                              next_cand["item"], next_cand["feature"])
                         state = next_state
                         cand = next_cand
 
-                        # Optimize Model
-                        newloss = ask_agent.optimize_model(args.batch_size, args.gamma)
-                        if newloss is not None:
-                            loss += newloss
-                        # ——————————————
-
                         if done:
-                            # every episode update the target model to be same with model
                             AvgT += t
-                            Avg_Step += env.cur_conver_step - 1
-                            # print("..", env.cur_conver_step-1)
                             total_reward += epi_reward
                             break
 
+                    # calculate HDCG Attribute
+                    for i in range(len(ask_score)):
+                        if ask_score[i] > 0:
+                            HDCG_attribute_list.append(
+                                (1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
+                                 math.log(i + 2, 2)))
+
                 # RECOMMEND
                 elif option == 0:
-                    # while not term and not done:
-                    '''
-                    Select Action
-                    '''
-                    sorted_items = rec_agent.select_action(state, cand["item"], action_space["item"])
-                    '''
-                    Env Interaction
-                    '''
-                    next_state, next_cand, action_space, reward, done = env.step(None, sorted_items)
-                    epi_reward += reward
-                    reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+                    termination = False
+                    items = []
+                    last_step = False
+                    while not termination and not done and not last_step:
+                        if env.cur_conver_step == args.max_rec_step:
+                            last_step = True
 
-                    # if done:
-                    #     next_state = None
+                        # Select Action
+                        chosen_item = rec_agent.select_action(state, cand["item"], action_space["item"])
+                        items.append(chosen_item.item())
 
-                    if (env.target_item+env.user_length) in sorted_items:
-                        rec_agent.memory.push(state, torch.tensor(env.target_item+env.user_length), next_state, reward, next_cand["item"])
-                    else:
-                        rec_agent.memory.push(state, torch.tensor(sorted_items[0]), next_state, reward, next_cand["item"])
-                    state = next_state
-                    cand = next_cand
+                        # Env Interaction
+                        next_state, next_cand, action_space, reward, done = env.step(None, items, mode="train")
+                        epi_reward += reward
+                        reward = torch.tensor([reward], device=args.device, dtype=torch.float)
 
-                    # Optimize Model
-                    newloss = rec_agent.optimize_model(args.batch_size, args.gamma)
-                    if newloss is not None:
-                        loss += newloss
-                    # ——————————————
+                        # Whether Termination
+                        next_state_emb = rec_agent.gcn_net([next_state])
+                        next_cand_emb = rec_agent.gcn_net.embedding(torch.LongTensor([next_cand["item"]]).to(args.device))
+                        term_score = rec_agent.termination_net(next_state_emb, next_cand_emb).item()
+                        print("Termination Score:", term_score)
+                        if term_score >= 0.5:
+                            termination = True
 
-                    if done:
-                        # every episode update the target model to be same with model
-                        if reward.item() == 1:  # recommend successfully
-                            if t < 5:
-                                SR5 += 1
-                                SR10 += 1
-                                SR15 += 1
-                            elif t < 10:
-                                SR10 += 1
-                                SR15 += 1
-                            else:
-                                SR15 += 1
-                            HDCG += (1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
-                                     math.log(done + 1, 2))
+                        # Push memory
+                        if done:
+                            next_state = None
 
-                        AvgT += t
-                        total_reward += epi_reward
-                        Avg_Step += env.cur_conver_step - 1
-                        # print("..", env.cur_conver_step-1)
-                        break
+                        rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward,
+                                              next_cand["item"], next_cand["feature"])
+                        state = next_state
+                        cand = next_cand
+                        if done:
+                            # every episode update the target model to be same with model
+                            if reward.item() == 1:  # recommend successfully
+                                if t < 5:
+                                    SR5 += 1
+                                    SR10 += 1
+                                    SR15 += 1
+                                elif t < 10:
+                                    SR10 += 1
+                                    SR15 += 1
+                                else:
+                                    SR15 += 1
+                                HDCG_item += (
+                                            1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
+                                            math.log(done + 1, 2))
+
+                            AvgT += t
+                            total_reward += epi_reward
+                            break
+
+                # Optimize Model
+                loss = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
+                if loss is not None:
+                    ask_loss += loss
+                # ——————————————
+
+                # Optimize Model
+                loss = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
+                if loss is not None:
+                    rec_loss += loss
+                # ——————————————
+
+                if option == 1:
+                    ask_step_list.append(env.cur_conver_step - 1)
+                else:
+                    rec_step_list.append(env.cur_conver_step - 1)
+
                 env.cur_conver_turn += 1
 
+            # print("*****", rec_step_list, ask_step_list)
         enablePrint()  # Enable print function
-        print('loss : {} in epoch_uesr {}'.format(loss.item() / args.sample_times, args.sample_times))
-        print('SR5:{}, SR10:{}, SR15:{}, AvgT:{}, Avg_Step:{}, HDCG:{}, rewards:{} '
-              'Total epoch_uesr:{}'.format(SR5 / args.sample_times, SR10 / args.sample_times, SR15 / args.sample_times,
-                                           AvgT / args.sample_times, Avg_Step / args.sample_times, HDCG / args.sample_times,
-                                           total_reward / args.sample_times, args.sample_times))
-
+        print('Recommend loss : {} in epoch_uesr {}'.format(rec_loss.item() / args.sample_times, args.sample_times))
+        print('Ask loss : {} in epoch_uesr {}'.format(ask_loss.item() / args.sample_times, args.sample_times))
+        print('SR5:{}, SR10:{}, SR15:{},  HDCG_item:{}, HDCG_attribute:{}, rewards:{} '
+              'Sample Times:{}'.format(SR5 / args.sample_times,
+                                       SR10 / args.sample_times,
+                                       SR15 / args.sample_times,
+                                       HDCG_item / args.sample_times,
+                                       statistics.mean(HDCG_attribute_list),
+                                       total_reward / args.sample_times,
+                                       args.sample_times))
+        print('Avg_Turn:{}, Avg_REC_Turn:{}, Avg_ASK_Turn:{},'
+              'Avg_REC_STEP:{}, Avg_ASK_STEP:{}'.format(AvgT / args.sample_times,
+                                                        len(rec_step_list) / args.sample_times,
+                                                        len(ask_step_list) / args.sample_times,
+                                                        statistics.mean(rec_step_list),
+                                                        statistics.mean(ask_step_list)))
         # if epoch % args.eval_num == 0:
         #     SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, epoch)
         #     test_performance.append(SR15_mean)
@@ -278,7 +332,7 @@ def set_arguments():
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')
     # parser.add_argument('--epochs', '-me', type=int, default=50000, help='the number of RL train epoch')
     # parser.add_argument('--fm_epoch', type=int, default=0, help='the epoch of FM embedding')
-    parser.add_argument('--batch_size', type=int, default=128, help='batch size.')
+    parser.add_argument('--batch_size', type=int, default=64, help='batch size.')
     parser.add_argument('--gamma', type=float, default=0.999, help='reward discount factor.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate.')
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
@@ -308,5 +362,8 @@ def set_arguments():
     parser.add_argument('--seq', type=str, default='transformer', choices=['rnn', 'transformer', 'mean'],
                         help='sequential learning method')
     parser.add_argument('--gcn', action='store_false', help='use GCN or not')
+    parser.add_argument('--max_rec_step', type=int, default=10, help='max recommend step in one turn')
+    parser.add_argument('--max_ask_step', type=int, default=3, help='max ask step in one turn')
+
     args = parser.parse_args()
     return args

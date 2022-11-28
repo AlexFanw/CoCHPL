@@ -7,20 +7,18 @@ warnings.filterwarnings("ignore")
 
 
 class ValueNetwork(nn.Module):
-    def __init__(self, action_size, hidden_size=100):
+    def __init__(self, hidden_size=100):
         super(ValueNetwork, self).__init__()
         # V(s)
-        self.linear = nn.Linear(hidden_size + action_size, hidden_size)
+        self.linear = nn.Linear(hidden_size, hidden_size)
         self.value = nn.Linear(hidden_size, 1)
 
-    def forward(self, x, y):
+    def forward(self, x):
         """
         :param x: encode history [N*L*D]
         :return: v: Value Score [N*1]
         """
         # V(s)
-        x = x.repeat(1, y.size(1), 1)
-        x = torch.cat((x, y), dim=2)
         x = F.relu(self.linear(x))
         value = self.value(x).squeeze(dim=2)  # [N*1*1]
         return value
@@ -29,10 +27,10 @@ class ValueNetwork(nn.Module):
         model_file = CHECKPOINT_DIR[data_name] + '/model/' + 'value-' + filename + '-epoch-{}.pkl'.format(epoch_user)
         model_dict = torch.load(model_file)
         print('Value model load at {}'.format(model_file))
-        self.load_state_dict(model_dict['value'])
+        self.load_state_dict(model_dict["value"])
 
     def save_value_net(self, data_name, filename, epoch_user):
-        model = {'value': self.state_dict()},
+        model = {'value': self.state_dict()}
         model_file = CHECKPOINT_DIR[data_name] + '/model/' + 'value-' + filename + '-epoch-{}.pkl'.format(epoch_user)
         if not os.path.isdir(CHECKPOINT_DIR[data_name] + '/model/'):
             os.makedirs(CHECKPOINT_DIR[data_name] + '/model/')

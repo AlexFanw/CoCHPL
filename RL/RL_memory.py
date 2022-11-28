@@ -3,7 +3,7 @@ from utils.utils import *
 from RL.RL_sumtree import SumTree
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward', 'next_cand'))
+                        ('state', 'action', 'next_state', 'reward', 'next_cand_items', 'next_cand_features'))
 
 
 class ReplayMemoryPER(object):

@@ -1,8 +1,8 @@
 import os
 import torch
 
-from RL.agent.agent import FeatureDict, train
-from RL.agent.option_critic_agent import set_arguments, option_critic_train
+from RL.agent.agent import FeatureDict
+from RL.RL_option_critic import set_arguments, option_critic_train
 from utils.utils import load_kg, load_dataset
 
 

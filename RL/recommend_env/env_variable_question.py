@@ -87,20 +87,14 @@ class VariableRecommendEnv(object):
         self.action_space = 2
 
         self.reward_dict = {
-            'ask_suc': 0.01,
+            'ask_suc': 1,
             'ask_fail': -0.1,
             'rec_suc': 1,
-            'rec_fail': -0.1,
+            'rec_fail': -0.033,
             'until_T': -0.3,  # MAX_Turn
             'cand_none': -0.1
         }
-        self.history_dict = {
-            'ask_suc': 1,
-            'ask_fail': -1,
-            'rec_scu': 2,
-            'rec_fail': -2,
-            'until_T': 0
-        }
+
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
     def __load_rl_data__(self, data_name, mode):
@@ -258,15 +252,15 @@ class VariableRecommendEnv(object):
                  'adj': adj}
         return state
 
-    def step(self, attribute, sorted_items, embed=None):
+    def step(self, attribute, items, embed=None, mode="train"):
         if embed is not None:
             self.ui_embeds = embed[:self.user_length + self.item_length]
             self.feature_emb = embed[self.user_length + self.item_length:]
         print('- - - - -turn:{}'.format(self.cur_conver_turn), 'step:{}- - - - -'.format(self.cur_conver_step))
 
-        if self.cur_conver_turn == self.max_turn or self.cur_conver_step == self.max_step:
+        if self.cur_conver_turn == self.max_turn:
             reward = self.reward_dict['until_T']
-            print('==> Maximum number of turns/steps reached !')
+            print('==> Maximum number of turns reached !')
             done = 1
         # ASK
         elif attribute is not None:
@@ -281,9 +275,11 @@ class VariableRecommendEnv(object):
 
             # ===================== rec update=========
             recom_items = []
-            for act in sorted_items:
-                if act < self.user_length + self.item_length:
-                    recom_items.append(self._map_to_old_id(act))
+            if mode == "train":
+                items = [items[-1]]
+            for item in items:
+                if item < self.user_length + self.item_length:
+                    recom_items.append(self._map_to_old_id(item))
                     if len(recom_items) == self.rec_num:
                         break
             reward, done = self._recommend_update(recom_items)
@@ -370,12 +366,10 @@ class VariableRecommendEnv(object):
             self.user_acc_feature.append(asked_feature)
             self.cur_node_set.append(asked_feature)
             reward = self.reward_dict['ask_suc']
-            # self.conver_his[self.cur_conver_step] = self.history_dict['ask_suc']  # update conver_his
         else:
             acc_rej = False
             self.user_rej_feature.append(asked_feature)
             reward = self.reward_dict['ask_fail']
-            # self.conver_his[self.cur_conver_step] = self.history_dict['ask_fail']  # update conver_his
 
         if self.cand_items == []:  # candidate items is empty
             done = 1
@@ -410,7 +404,6 @@ class VariableRecommendEnv(object):
         # recom_items = self.cand_items[: self.rec_num]    # TOP k item to recommend
         if self.target_item in recom_items:
             reward = self.reward_dict['rec_suc']
-            # self.conver_his[self.cur_conver_step] = self.history_dict['rec_scu']  # update state vector: conver_his
             tmp_score = []
             for item in recom_items:
                 idx = self.cand_items.index(item)
@@ -421,8 +414,6 @@ class VariableRecommendEnv(object):
             # done = 1
         else:
             reward = self.reward_dict['rec_fail']
-            # print(len(# self.conver_his), self.cur_conver_step)
-            # self.conver_his[self.cur_conver_step] = self.history_dict['rec_fail']  # update state vector: conver_his
             if len(self.cand_items) > self.rec_num:
                 for item in recom_items:
                     del self.item_feature_pair[item]
