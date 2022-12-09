@@ -1,41 +1,21 @@
 import math
 
-import torch
 from tqdm import tqdm
 from collections import namedtuple
 import argparse
-from itertools import count, chain
-import torch.nn as nn
-import torch.optim as optim
 import statistics
 
 from RL.agent.ask_agent import AskAgent
 from RL.agent.rec_agent import RecAgent
-from RL.network_dueling_Q import DuelingQNetwork
 from RL.RL_memory import ReplayMemoryPER
-from RL.network_value import ValueNetwork
+from RL.network.network_value import ValueNetwork
 from utils.utils import *
-from RL.recommend_env.env_binary_question import BinaryRecommendEnv
-from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
 from RL.recommend_env.env_variable_question import VariableRecommendEnv
-from RL.RL_evaluate import dqn_evaluate
+from RL.RL_evaluate import evaluate
 from graph.gcn import GraphEncoder
 import warnings
 
 warnings.filterwarnings("ignore")
-
-RecommendEnv = {
-    LAST_FM: VariableRecommendEnv,
-    LAST_FM_STAR: VariableRecommendEnv,
-    YELP: EnumeratedRecommendEnv,  # Pending
-    YELP_STAR: VariableRecommendEnv
-}
-FeatureDict = {
-    LAST_FM: 'feature',
-    LAST_FM_STAR: 'feature',
-    YELP: 'large_feature',  # Pending
-    YELP_STAR: 'feature'
-}
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'next_cand'))
@@ -72,10 +52,10 @@ def choose_option(ask_agent, rec_agent, state, cand):
         rec_Q = np.array(rec_score).dot(np.exp(rec_score) / sum(np.exp(rec_score)))
         # return ask_Q / (ask_Q + rec_Q), rec_Q / (ask_Q + rec_Q)
         return math.exp(ask_Q) / (math.exp(ask_Q) + math.exp(rec_Q)), math.exp(rec_Q) / (
-                    math.exp(ask_Q) + math.exp(rec_Q))
+                math.exp(ask_Q) + math.exp(rec_Q))
 
 
-def option_critic_train(args, kg, dataset, filename):
+def option_critic_pipeline(args, kg, dataset, filename):
     """RL Model Train
 
     :param args: some experiment settings
@@ -86,16 +66,16 @@ def option_critic_train(args, kg, dataset, filename):
     """
     set_random_seed(args.seed)
     # Prepare the Environment
-    env = RecommendEnv[args.data_name](kg, dataset,
-                                       args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
-                                       cand_num=args.cand_num, cand_item_num=args.cand_item_num,
-                                       attr_num=args.attr_num, mode='train', ask_num=args.ask_num,
-                                       entropy_way=args.entropy_method, max_step=args.max_step)
+    env = VariableRecommendEnv(kg, dataset,
+                               args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
+                               cand_num=args.cand_num, cand_item_num=args.cand_item_num,
+                               attr_num=args.attr_num, mode='train',
+                               entropy_way=args.entropy_method, max_step=args.max_step)
 
     # User&Feature Embedding
     embed = torch.FloatTensor(
         np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
-
+    # print(embed.size(0), embed.size(1))
     '''
     VALUE NET
     '''
@@ -105,9 +85,8 @@ def option_critic_train(args, kg, dataset, filename):
     '''
     # ASK GCN Transformer
     ask_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-                               embeddings=embed,
-                               fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(
-        args.device)
+                               embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
+                               hidden_size=args.hidden).to(args.device)
     # Ask Memory
     ask_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Ask Agent
@@ -119,9 +98,8 @@ def option_critic_train(args, kg, dataset, filename):
     '''
     # Rec GCN Transformer
     rec_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-                               embeddings=embed,
-                               fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(
-        args.device)
+                               embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
+                               hidden_size=args.hidden).to(args.device)
     # Rec Memory
     rec_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Rec Agent
@@ -137,18 +115,16 @@ def option_critic_train(args, kg, dataset, filename):
         # TODO: gru_net.load_model()
 
     test_performance = []
-    # TODO Evaluate
-    # if args.eval_num == 1:
-    #     SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, 0)
-    #     test_performance.append(SR15_mean)
     for epoch in range(1 + args.load_rl_epoch, args.max_epoch + 1):
         print("\nEpoch: {}, Total: {}".format(epoch, args.max_epoch))
         SR5, SR10, SR15, AvgT, HDCG_item, total_reward = 0., 0., 0., 0., 0., 0.
         rec_step_list = []
         ask_step_list = []
         HDCG_attribute_list = []
-        rec_loss = torch.tensor(0, dtype=torch.float, device=args.device)
-        ask_loss = torch.tensor(0, dtype=torch.float, device=args.device)
+        rec_loss = []
+        ask_loss = []
+        rec_state_infer_loss = []
+        ask_state_infer_loss = []
         for i_episode in tqdm(range(args.sample_times), desc='sampling'):
             blockPrint()
             print('\n================Epoch:{} Episode:{}===================='.format(epoch, i_episode))
@@ -185,7 +161,6 @@ def option_critic_train(args, kg, dataset, filename):
 
                         # Select Action
                         chosen_feature = ask_agent.select_action(state, cand["feature"], action_space["feature"])
-
                         # Env Interaction
                         next_state, next_cand, action_space, reward, done = env.step(chosen_feature.item(), None)
                         epi_reward += reward
@@ -244,7 +219,8 @@ def option_critic_train(args, kg, dataset, filename):
 
                         # Whether Termination
                         next_state_emb = rec_agent.gcn_net([next_state])
-                        next_cand_emb = rec_agent.gcn_net.embedding(torch.LongTensor([next_cand["item"]]).to(args.device))
+                        next_cand_emb = rec_agent.gcn_net.embedding(
+                            torch.LongTensor([next_cand["item"]]).to(args.device))
                         term_score = rec_agent.termination_net(next_state_emb, next_cand_emb).item()
                         print("Termination Score:", term_score)
                         if term_score >= 0.5:
@@ -271,23 +247,25 @@ def option_critic_train(args, kg, dataset, filename):
                                 else:
                                     SR15 += 1
                                 HDCG_item += (
-                                            1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
-                                            math.log(done + 1, 2))
+                                        1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
+                                        math.log(done + 1, 2))
 
                             AvgT += t
                             total_reward += epi_reward
                             break
 
                 # Optimize Model
-                loss = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
+                loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
                 if loss is not None:
-                    ask_loss += loss
+                    ask_loss.append(loss)
+                    ask_state_infer_loss.append(loss_state)
                 # ——————————————
 
                 # Optimize Model
-                loss = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
+                loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
                 if loss is not None:
-                    rec_loss += loss
+                    rec_loss.append(loss)
+                    rec_state_infer_loss.append(loss_state)
                 # ——————————————
 
                 if option == 1:
@@ -297,32 +275,32 @@ def option_critic_train(args, kg, dataset, filename):
 
                 env.cur_conver_turn += 1
 
-            # print("*****", rec_step_list, ask_step_list)
         enablePrint()  # Enable print function
-        print('Recommend loss : {} in epoch_uesr {}'.format(rec_loss.item() / args.sample_times, args.sample_times))
-        print('Ask loss : {} in epoch_uesr {}'.format(ask_loss.item() / args.sample_times, args.sample_times))
-        print('SR5:{}, SR10:{}, SR15:{},  HDCG_item:{}, HDCG_attribute:{}, rewards:{} '
-              'Sample Times:{}'.format(SR5 / args.sample_times,
-                                       SR10 / args.sample_times,
-                                       SR15 / args.sample_times,
-                                       HDCG_item / args.sample_times,
-                                       statistics.mean(HDCG_attribute_list),
-                                       total_reward / args.sample_times,
-                                       args.sample_times))
-        print('Avg_Turn:{}, Avg_REC_Turn:{}, Avg_ASK_Turn:{},'
-              'Avg_REC_STEP:{}, Avg_ASK_STEP:{}'.format(AvgT / args.sample_times,
-                                                        len(rec_step_list) / args.sample_times,
-                                                        len(ask_step_list) / args.sample_times,
-                                                        statistics.mean(rec_step_list),
-                                                        statistics.mean(ask_step_list)))
-        # if epoch % args.eval_num == 0:
-        #     SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, epoch)
-        #     test_performance.append(SR15_mean)
+        print('\nSample Times:{}'.format(args.sample_times))
+        print('Recommend loss : {}'.format(statistics.mean(rec_loss)))
+        print('Recommend State Infer loss : {}'.format(statistics.mean(rec_state_infer_loss)))
+        print('Ask loss : {}'.format(statistics.mean(ask_loss)))
+        print('Ask State Infer loss : {}'.format(statistics.mean(ask_state_infer_loss)))
+        print('SR5:{}\nSR10:{}\nSR15:{}\nHDCG_item:{}\nHDCG_attribute:{}\nrewards:{}\n'.format(SR5 / args.sample_times,
+                                                                                               SR10 / args.sample_times,
+                                                                                               SR15 / args.sample_times,
+                                                                                               HDCG_item / args.sample_times,
+                                                                                               statistics.mean(
+                                                                                                   HDCG_attribute_list),
+                                                                                               total_reward / args.sample_times))
+        print('Avg_Turn:{}\nAvg_REC_Turn:{}\nAvg_ASK_Turn:{}\nAvg_REC_STEP:{}\nAvg_ASK_STEP:{}'.format(
+            AvgT / args.sample_times,
+            len(rec_step_list) / args.sample_times,
+            len(ask_step_list) / args.sample_times,
+            statistics.mean(rec_step_list),
+            statistics.mean(ask_step_list)))
+        if epoch % args.eval_num == 0:
+            SR15_mean = evaluate(args, kg, dataset, agent, filename, epoch)
+            test_performance.append(SR15_mean)
         if epoch % args.save_num == 0:
-            ask_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
-            rec_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
-            value_net.save_value_net(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
-            # TODO: gru_net.save_model()
+            ask_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=epoch)
+            rec_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=epoch)
+            value_net.save_value_net(data_name=args.data_name, filename=filename, epoch_user=epoch)
     print(test_performance)
 
 
@@ -330,9 +308,7 @@ def set_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', '-seed', type=int, default=1, help='random seed.')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')
-    # parser.add_argument('--epochs', '-me', type=int, default=50000, help='the number of RL train epoch')
-    # parser.add_argument('--fm_epoch', type=int, default=0, help='the epoch of FM embedding')
-    parser.add_argument('--batch_size', type=int, default=64, help='batch size.')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size.')
     parser.add_argument('--gamma', type=float, default=0.999, help='reward discount factor.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate.')
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
@@ -347,7 +323,6 @@ def set_arguments():
     parser.add_argument('--max_step', type=int, default=50, help='max conversation turn')
     parser.add_argument('--attr_num', type=int, help='the number of attributes')
     parser.add_argument('--mode', type=str, default='train', help='the mode in [train, test]')
-    parser.add_argument('--ask_num', type=int, default=1, help='the number of features asked in a turn')
     parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading RL model')
 
     parser.add_argument('--sample_times', type=int, default=100, help='the episodes of sampling')
@@ -359,8 +334,7 @@ def set_arguments():
     parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')
     parser.add_argument('--fix_emb', action='store_false', help='fix embedding or not')
     parser.add_argument('--embed', type=str, default='transe', help='pretrained embeddings')
-    parser.add_argument('--seq', type=str, default='transformer', choices=['rnn', 'transformer', 'mean'],
-                        help='sequential learning method')
+    parser.add_argument('--seq', type=str, default='transformer', help='sequential learning method')
     parser.add_argument('--gcn', action='store_false', help='use GCN or not')
     parser.add_argument('--max_rec_step', type=int, default=10, help='max recommend step in one turn')
     parser.add_argument('--max_ask_step', type=int, default=3, help='max ask step in one turn')

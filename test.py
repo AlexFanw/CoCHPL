@@ -1,8 +1,11 @@
-import pickle
-if __name__ == "__main__":
-    # f = open('dict_word.pkl', 'rb')
-    # for line in f:
-    #     print(line)
-    word = pickle.load(open("fea_large.pkl", 'rb'), encoding='utf-8')
-    print("")
+import torch
 
+if __name__ == "__main__":
+    x = torch.tensor([2.])
+    x.requires_grad_(True)
+    y = torch.tensor([2.])
+    a = x + y
+    b = a + y
+    c = a + b
+    print(c.requires_grad)
+    # out.backward()

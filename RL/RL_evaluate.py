@@ -2,92 +2,203 @@ import time
 from itertools import count
 import math
 from utils.utils import *
-from RL.recommend_env.env_binary_question import BinaryRecommendEnv
-from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
+from RL.recommend_env.env_variable_question import VariableRecommendEnv
 from tqdm import tqdm
 
-RecommendEnv = {
-    LAST_FM: BinaryRecommendEnv,
-    LAST_FM_STAR: BinaryRecommendEnv,
-    YELP: EnumeratedRecommendEnv,
-    YELP_STAR: BinaryRecommendEnv
-}
 
-
-def dqn_evaluate(args, kg, dataset, agent, filename, i_episode):
-    test_env = RecommendEnv[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
-                                       cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num,
-                                       mode='test', ask_num=args.ask_num, entropy_way=args.entropy_method,
-                                       )
+def evaluate(args, kg, dataset, filename, i_episode, ask_agent=None, rec_agent=None, value_net=None):
+    env = VariableRecommendEnv(kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
+                                    cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num,
+                                    mode='test', entropy_way=args.entropy_method)
     set_random_seed(args.seed)
     tt = time.time()
     start = tt
 
-    SR5, SR10, SR15, AvgT, Rank, total_reward = 0, 0, 0, 0, 0, 0
+    SR5, SR10, SR15, AvgT, HDCG_item, total_reward = 0., 0., 0., 0., 0., 0.
+    rec_step_list = []
+    ask_step_list = []
+    HDCG_attribute_list = []
     SR_turn_15 = [0] * args.max_turn
     turn_result = []
     result = []
-    user_size = test_env.ui_array.shape[0]
-    print('User size in UI_test: ', user_size)
+    total_user_size = env.ui_array.shape[0]
+    print('User size in UI_test: ', total_user_size)
     test_filename = 'Evaluate-epoch-{}-'.format(i_episode) + filename
     plot_filename = 'Evaluate-'.format(i_episode) + filename
-    if args.data_name in [LAST_FM_STAR, LAST_FM]:
-        if args.eval_num == 1:
-            test_size = 500
-        else:
-            test_size = 4000  # Only do 4000 iteration for the sake of time
-        user_size = test_size
-    if args.data_name in [YELP_STAR, YELP]:
-        if args.eval_num == 1:
-            test_size = 500
-        else:
-            test_size = 2500  # Only do 2500 iteration for the sake of time
-        user_size = test_size
-    print('The select Test size : ', test_size)
+    user_size = 3000
+    print('The select Test size : ', user_size)
     for user_num in tqdm(range(user_size)):  # user_size
-        # TODO uncommend this line to print the dialog process
         blockPrint()
-        print('\n================test tuple:{}===================='.format(user_num))
-        if not args.fix_emb:
-            state, cand, action_space = test_env.reset(
-                agent.gcn_net.embedding.weight.data.cpu().detach().numpy())  # Reset environment and record the starting state
-        else:
-            state, cand, action_space = test_env.reset()
+        print('\n================Epoch:{} Episode:{}===================='.format(epoch, i_episode))
+        state, cand, action_space = env.reset()
         epi_reward = 0
-        is_last_turn = False
-        for t in count():  # user  dialog
-            if t == 14:
-                is_last_turn = True
-            action, sorted_actions = agent.select_action(state, cand, action_space, is_test=True,
-                                                         is_last_turn=is_last_turn)
-            next_state, next_cand, action_space, reward, done = test_env.step(action.item(), sorted_actions)
-            epi_reward += reward
-            reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+        done = 0
+        for t in range(1, 16):  # Turn
+            '''
+            Option choose : Select Ask / Rec
+            '''
+            env.cur_conver_step = 1
             if done:
-                next_state = None
-            state = next_state
-            cand = next_cand
-            if done:
-                # enablePrint()
-                if reward.item() == 1:  # recommend successfully
-                    SR_turn_15 = [v + 1 if i > t else v for i, v in enumerate(SR_turn_15)]
-                    if t < 5:
-                        SR5 += 1
-                        SR10 += 1
-                        SR15 += 1
-                    elif t < 10:
-                        SR10 += 1
-                        SR15 += 1
-                    else:
-                        SR15 += 1
-                    # Caculate HDCG@(T,K)
-                    Rank += (1 / math.log(t + 3, 2) + (1 / math.log(t + 2, 2) - 1 / math.log(t + 3, 2)) / math.log(
-                        done + 1, 2))
-                else:
-                    Rank += 0
-                total_reward += epi_reward
-                AvgT += t + 1
                 break
+            print("Candidate: ", cand)
+            ask_Q, rec_Q = choose_option(ask_agent, rec_agent, state, cand)
+            print(ask_Q, rec_Q)
+            if ask_Q > rec_Q:
+                option = 1
+                print("\n————————Turn: ", t, "  Option: ASK————————")
+            else:
+                option = 0
+                print("\n————————Turn: ", t, "  Option: REC————————")
+
+            '''
+            Intra Option choose: Select features / items
+            '''
+            # ASK
+            if option == 1:
+                termination = False
+                ask_score = []
+                while not termination and not done:
+                    if env.cur_conver_step > args.max_ask_step:
+                        break
+
+                    # Select Action
+                    chosen_feature = ask_agent.select_action(state, cand["feature"], action_space["feature"])
+                    # Env Interaction
+                    next_state, next_cand, action_space, reward, done = env.step(chosen_feature.item(), None)
+                    epi_reward += reward
+                    ask_score.append(reward)
+                    reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+
+                    # Whether Termination
+                    next_state_emb = ask_agent.gcn_net([next_state])
+                    next_cand_emb = ask_agent.gcn_net.embedding(
+                        torch.LongTensor([next_cand["feature"]]).to(args.device))
+                    term_score = rec_agent.termination_net(next_state_emb, next_cand_emb).item()
+                    print("Termination Score:", term_score)
+                    if term_score >= 0.5:
+                        termination = True
+                    if next_cand["feature"] == []:
+                        termination = True
+
+                    # Push memory
+                    if done:
+                        next_state = None
+
+                    ask_agent.memory.push(state, chosen_feature, next_state, reward,
+                                          next_cand["item"], next_cand["feature"])
+                    state = next_state
+                    cand = next_cand
+
+                    if done:
+                        AvgT += t
+                        total_reward += epi_reward
+                        break
+
+                # calculate HDCG Attribute
+                for i in range(len(ask_score)):
+                    if ask_score[i] > 0:
+                        HDCG_attribute_list.append(
+                            (1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
+                             math.log(i + 2, 2)))
+
+            # RECOMMEND
+            elif option == 0:
+                termination = False
+                items = []
+                last_step = False
+                while not termination and not done and not last_step:
+                    if env.cur_conver_step == args.max_rec_step:
+                        last_step = True
+
+                    # Select Action
+                    chosen_item = rec_agent.select_action(state, cand["item"], action_space["item"])
+                    items.append(chosen_item.item())
+
+                    # Env Interaction
+                    next_state, next_cand, action_space, reward, done = env.step(None, items, mode="train")
+                    epi_reward += reward
+                    reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+
+                    # Whether Termination
+                    next_state_emb = rec_agent.gcn_net([next_state])
+                    next_cand_emb = rec_agent.gcn_net.embedding(
+                        torch.LongTensor([next_cand["item"]]).to(args.device))
+                    term_score = rec_agent.termination_net(next_state_emb, next_cand_emb).item()
+                    print("Termination Score:", term_score)
+                    if term_score >= 0.5:
+                        termination = True
+
+                    # Push memory
+                    if done:
+                        next_state = None
+
+                    rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward,
+                                          next_cand["item"], next_cand["feature"])
+                    state = next_state
+                    cand = next_cand
+                    if done:
+                        # every episode update the target model to be same with model
+                        if reward.item() == 1:  # recommend successfully
+                            if t < 5:
+                                SR5 += 1
+                                SR10 += 1
+                                SR15 += 1
+                            elif t < 10:
+                                SR10 += 1
+                                SR15 += 1
+                            else:
+                                SR15 += 1
+                            HDCG_item += (
+                                    1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
+                                    math.log(done + 1, 2))
+
+                        AvgT += t
+                        total_reward += epi_reward
+                        break
+
+            # Optimize Model
+            loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
+            if loss is not None:
+                ask_loss.append(loss)
+                ask_state_infer_loss.append(loss_state)
+            # ——————————————
+
+            # Optimize Model
+            loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
+            if loss is not None:
+                rec_loss.append(loss)
+                rec_state_infer_loss.append(loss_state)
+            # ——————————————
+
+            if option == 1:
+                ask_step_list.append(env.cur_conver_step - 1)
+            else:
+                rec_step_list.append(env.cur_conver_step - 1)
+
+            env.cur_conver_turn += 1
+
+    enablePrint()  # Enable print function
+    print('\nSample Times:{}'.format(args.sample_times))
+    print('Recommend loss : {}'.format(statistics.mean(rec_loss)))
+    print('Recommend State Infer loss : {}'.format(statistics.mean(rec_state_infer_loss)))
+    print('Ask loss : {}'.format(statistics.mean(ask_loss)))
+    print('Ask State Infer loss : {}'.format(statistics.mean(ask_state_infer_loss)))
+    print('SR5:{}\nSR10:{}\nSR15:{}\nHDCG_item:{}\nHDCG_attribute:{}\nrewards:{}\n'.format(SR5 / args.sample_times,
+                                                                                           SR10 / args.sample_times,
+                                                                                           SR15 / args.sample_times,
+                                                                                           HDCG_item / args.sample_times,
+                                                                                           statistics.mean(
+                                                                                               HDCG_attribute_list),
+                                                                                           total_reward / args.sample_times))
+    print('Avg_Turn:{}\nAvg_REC_Turn:{}\nAvg_ASK_Turn:{}\nAvg_REC_STEP:{}\nAvg_ASK_STEP:{}'.format(
+        AvgT / args.sample_times,
+        len(rec_step_list) / args.sample_times,
+        len(ask_step_list) / args.sample_times,
+        statistics.mean(rec_step_list),
+        statistics.mean(ask_step_list)))
+    if epoch % args.eval_num == 0:
+        SR15_mean = evaluate(args, kg, dataset, agent, filename, epoch)
+        test_performance.append(SR15_mean)
 
         if (user_num + 1) % args.observe_num == 0 and user_num > 0:
             SR = [SR5 / args.observe_num, SR10 / args.observe_num, SR15 / args.observe_num, AvgT / args.observe_num,

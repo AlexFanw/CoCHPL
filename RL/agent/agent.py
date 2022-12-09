@@ -6,12 +6,12 @@ from itertools import count, chain
 import torch.nn as nn
 import torch.optim as optim
 
-from RL.network_dueling_Q import DuelingQNetwork
+from RL.network.network_dueling_Q import DuelingQNetwork
 from RL.RL_memory import ReplayMemoryPER
 from utils.utils import *
 from RL.recommend_env.env_binary_question import BinaryRecommendEnv
 from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
-from RL.RL_evaluate import dqn_evaluate
+from RL.RL_evaluate import evaluate
 from graph.gcn import GraphEncoder
 import warnings
 warnings.filterwarnings("ignore")
@@ -191,7 +191,7 @@ def train(args, kg, dataset, filename):
 
     test_performance = []
     if args.eval_num == 1:
-        SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, 0)
+        SR15_mean = evaluate(args, kg, dataset, agent, filename, 0)
         test_performance.append(SR15_mean)
     for train_step in range(1 + args.load_rl_epoch, args.max_epoch + 1):
         print(">>>Train Step: {}, Total: {}".format(train_step, args.max_epoch))
@@ -266,7 +266,7 @@ def train(args, kg, dataset, filename):
                                            total_reward / args.sample_times, args.sample_times))
 
         if train_step % args.eval_num == 0:
-            SR15_mean = dqn_evaluate(args, kg, dataset, agent, filename, train_step)
+            SR15_mean = evaluate(args, kg, dataset, agent, filename, train_step)
             test_performance.append(SR15_mean)
         if train_step % args.save_num == 0:
             agent.save_model(data_name=args.data_name, filename=filename, epoch_user=train_step)

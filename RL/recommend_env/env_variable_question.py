@@ -8,7 +8,7 @@ from collections import Counter
 
 class VariableRecommendEnv(object):
     def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20,
-                 mode='train', ask_num=1, entropy_way='weight entropy', max_step=50):
+                 mode='train', entropy_way='weight entropy', max_step=50):
         self.data_name = data_name
         self.mode = mode
         self.seed = seed
@@ -22,7 +22,6 @@ class VariableRecommendEnv(object):
         self.item_length = getattr(self.dataset, 'item').value_len
 
         # action parameters
-        self.ask_num = ask_num
         self.rec_num = 10
         self.random_sample_feature = False
         self.random_sample_item = False
@@ -86,11 +85,20 @@ class VariableRecommendEnv(object):
 
         self.action_space = 2
 
+        # self.reward_dict = {
+        #     'ask_suc': 1,
+        #     'ask_fail': -0.1,
+        #     'rec_suc': 1,
+        #     'rec_fail': -0.033,
+        #     'until_T': -0.3,  # MAX_Turn
+        #     'cand_none': -0.1
+        # }
+        # LAST FM STAR
         self.reward_dict = {
             'ask_suc': 1,
             'ask_fail': -0.1,
             'rec_suc': 1,
-            'rec_fail': -0.033,
+            'rec_fail': -0.1,
             'until_T': -0.3,  # MAX_Turn
             'cand_none': -0.1
         }

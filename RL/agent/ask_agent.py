@@ -1,21 +1,15 @@
-import math
-from tqdm import tqdm
 from collections import namedtuple
-import argparse
-from itertools import count, chain
+from itertools import chain
 import torch.nn as nn
 import torch.optim as optim
 
-from RL.network_advantage import AdvantageNetwork
-from RL.network_dueling_Q import DuelingQNetwork
-from RL.RL_memory import ReplayMemoryPER
-from RL.network_termination import TerminationNetwork
+from RL.network.network_advantage import AdvantageNetwork
+from RL.network.network_termination import TerminationNetwork
 from RL.recommend_env.env_variable_question import VariableRecommendEnv
 from utils.utils import *
 from RL.recommend_env.env_binary_question import BinaryRecommendEnv
 from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
-from RL.RL_evaluate import dqn_evaluate
-from graph.gcn import GraphEncoder
+from graph.gcn import StateTransitionProb
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -39,10 +33,8 @@ Transition = namedtuple('Transition',
 
 class AskAgent(object):
     def __init__(self, device, memory, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
-                 PADDING_ID, value_net, EPS_START=0.9, EPS_END=0.1, EPS_DECAY=0.0001, tau=0.01):
-        self.EPS_START = EPS_START
+                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01):
         self.EPS_END = EPS_END
-        self.EPS_DECAY = EPS_DECAY
         self.device = device
         # GCN+Transformer Embedding
         self.gcn_net = gcn_net
@@ -55,8 +47,12 @@ class AskAgent(object):
         self.target_net = AdvantageNetwork(action_size, hidden_size).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
-
-
+        # state_inferrer
+        self.state_inferrer = StateTransitionProb(gcn=gcn_net, state_emb_size=hidden_size, cand_emb_size=action_size)
+        # state optimizer
+        self.optimizer_state = optim.Adam(chain(self.state_inferrer.parameters()),
+                                          lr=learning_rate,
+                                          weight_decay=l2_norm)
         # Optimizer
         self.optimizer = optim.Adam(chain(self.policy_net.parameters(),
                                           self.gcn_net.parameters(),
@@ -95,7 +91,7 @@ class AskAgent(object):
 
     def optimize_model(self, BATCH_SIZE, GAMMA, rec_agent=None):
         if len(self.memory) < BATCH_SIZE:
-            return
+            return None, None
 
         self.update_target_model()
 
@@ -111,11 +107,11 @@ class AskAgent(object):
                 n_cand_items.append(ci)
                 n_cand_features.append(cf)
         if not n_states:
-            return 0
+            return 0, 0
 
         '''
         Double DQN
-        Q_policy - (r + GAMMA * [max Q_target(next) (1-termination) + Value (termination)])
+        Q_policy - (r + GAMMA * [ Q_target(next) * (1-termination) + Q_max * termination])
         '''
         q_policy_features, q_target_features = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_features)
 
@@ -144,7 +140,27 @@ class AskAgent(object):
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
-        return loss.data
+        '''
+        State Transition
+        '''
+        states = []
+        actions = []
+        rewards = []
+        for s, a, r in zip(batch.state, batch.action, batch.reward):
+            if s is not None:
+                states.append(s)
+                actions.append([a])
+                if r <= 0:
+                    rewards.append(torch.FloatTensor([0]))
+                else:
+                    rewards.append(torch.FloatTensor([1]))
+        infer_reward = self.state_inferrer(states, torch.LongTensor(actions))
+        loss_reward = (self.loss_func(torch.stack(rewards), infer_reward)).mean()
+        self.optimizer_state.zero_grad()
+        loss_reward.backward()
+        self.optimizer_state.step()
+
+        return loss.data.item(), loss_reward.data.item()
 
     def calculate_q_score(self, BATCH_SIZE, batch, n_states, n_cands, rec_agent=None):
         if rec_agent == None:
@@ -203,7 +219,8 @@ class AskAgent(object):
         save_rl_agent(dataset=data_name,
                       model={'policy': self.policy_net.state_dict(),
                              'gcn': self.gcn_net.state_dict(),
-                             'termination': self.termination_net.state_dict()},
+                             'termination': self.termination_net.state_dict(),
+                             'state': self.state_inferrer.state_dict()},
                       filename=filename, epoch_user=epoch_user, agent="ask")
 
     def load_model(self, data_name, filename, epoch_user):
@@ -211,6 +228,7 @@ class AskAgent(object):
         self.policy_net.load_state_dict(model_dict['policy'])
         self.gcn_net.load_state_dict(model_dict['gcn'])
         self.termination_net.load_state_dict(model_dict['termination'])
+        self.state_inferrer.load_state_dict(model_dict['state'])
 
     def padding(self, cand):
         pad_size = max([len(c) for c in cand])

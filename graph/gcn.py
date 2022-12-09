@@ -45,7 +45,7 @@ class GraphEncoder(Module):
         self.embedding = nn.Embedding(entity, emb_size, padding_idx=entity-1)
         if embeddings is not None:
             print("pre-trained embeddings")
-            self.embedding.from_pretrained(embeddings,freeze=fix_emb)
+            self.embedding.from_pretrained(embeddings, freeze=fix_emb)
         self.layers = layers
         self.user_num = len(kg.G['user'])
         self.item_num = len(kg.G['item'])
@@ -63,7 +63,7 @@ class GraphEncoder(Module):
         if self.gcn:
             indim, outdim = emb_size, hidden_size
             self.gnns = nn.ModuleList()
-            for l in range(layers):
+            for l in range(self.layers):
                 self.gnns.append(GraphConvolution(indim, outdim))
                 indim = outdim
         else:
@@ -75,6 +75,7 @@ class GraphEncoder(Module):
         :return: [N x L x d]
         """
         batch_output = []
+        output_state = None
         for s in b_state:
             # neighbors, adj = self.get_state_graph(s)
             neighbors, adj = s['neighbors'].to(self.device), s['adj'].to(self.device)
@@ -118,3 +119,22 @@ class GraphEncoder(Module):
             new_s[:cur_size,:] = s[0]
             padded_seq.append(new_s[None,:])
         return padded_seq
+
+
+class StateTransitionProb(Module):
+    def __init__(self, gcn, state_emb_size, cand_emb_size):
+        super(StateTransitionProb, self).__init__()
+        self.gcn = gcn
+        self.fc1 = nn.Linear(cand_emb_size + state_emb_size, cand_emb_size + state_emb_size)
+        self.output = torch.nn.Linear(cand_emb_size + state_emb_size, 1)
+        self.tanh = nn.Tanh()
+        self.sigmoid = nn.Sigmoid()
+    def forward(self, states, cands):
+        states_embedding = self.gcn(states)
+        cands_embedding = self.gcn.embedding(cands)
+        x = torch.cat((states_embedding, cands_embedding), dim=2)
+        x = self.tanh(x)
+        x = self.output(x)
+        x = self.sigmoid(x)
+        return x.squeeze()
+

@@ -2,7 +2,7 @@ import os
 import torch
 
 from RL.agent.agent import FeatureDict
-from RL.RL_option_critic import set_arguments, option_critic_train
+from RL.RL_option_critic import set_arguments, option_critic_pipeline
 from utils.utils import load_kg, load_dataset
 
 
@@ -30,4 +30,4 @@ if __name__ == '__main__':
     filename = 'train-datasets-{}-RL-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
         args.data_name, args.cand_num, args.cand_item_num, args.embed, args.seq, args.gcn)
     # train(args, kg, dataset, filename)
-    option_critic_train(args, kg, dataset, filename)
+    option_critic_pipeline(args, kg, dataset, filename)

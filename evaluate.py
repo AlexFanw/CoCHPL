@@ -1,4 +1,3 @@
-
 import math
 
 from tqdm import tqdm
@@ -8,7 +7,7 @@ import argparse
 from itertools import count
 from utils.utils import *
 
-#TODO select env
+# TODO select env
 from RL.recommend_env.env_binary_question import BinaryRecommendEnv
 from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
 from RL.agent.agent import Agent, ReplayMemoryPER
@@ -16,14 +15,13 @@ from graph.gcn import GraphEncoder
 import time
 import warnings
 
-
 warnings.filterwarnings("ignore")
 RecommendEnv = {
     LAST_FM: BinaryRecommendEnv,
     LAST_FM_STAR: BinaryRecommendEnv,
     YELP: EnumeratedRecommendEnv,
     YELP_STAR: BinaryRecommendEnv
-    }
+}
 
 FeatureDict = {
     LAST_FM: 'feature',
@@ -34,16 +32,21 @@ FeatureDict = {
 
 
 def evaluate(args, kg, dataset, filename):
-    test_env = RecommendEnv[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
-                                       cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num, mode='test', ask_num=args.ask_num, entropy_way=args.entropy_method,
-                                       )
+    test_env = RecommendEnv[args.data_name](kg, dataset, args.data_name, args.embed, seed=args.seed,
+                                            max_turn=args.max_turn,
+                                            cand_num=args.cand_num, cand_item_num=args.cand_item_num,
+                                            attr_num=args.attr_num, mode='test', ask_num=args.ask_num,
+                                            entropy_way=args.entropy_method,
+                                            )
     set_random_seed(args.seed)
-    memory = ReplayMemoryPER(args.memory_size) #10000
-    embed = torch.FloatTensor(np.concatenate((test_env.ui_embeds, test_env.feature_emb, np.zeros((1,test_env.ui_embeds.shape[1]))), axis=0))
+    memory = ReplayMemoryPER(args.memory_size)  # 10000
+    embed = torch.FloatTensor(
+        np.concatenate((test_env.ui_embeds, test_env.feature_emb, np.zeros((1, test_env.ui_embeds.shape[1]))), axis=0))
     gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg, embeddings=embed,
                            fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn, hidden_size=args.hidden).to(args.device)
     agent = Agent(device=args.device, memory=memory, action_size=embed.size(1),
-                  hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm, PADDING_ID=embed.size(0)-1)
+                  hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate, l2_norm=args.l2_norm,
+                  PADDING_ID=embed.size(0) - 1)
     print('Staring loading rl model in epoch {}'.format(args.load_rl_epoch))
     agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
 
@@ -51,11 +54,11 @@ def evaluate(args, kg, dataset, filename):
     start = tt
 
     SR5, SR10, SR15, AvgT, Rank = 0, 0, 0, 0, 0
-    SR_turn_15 = [0]* args.max_turn
+    SR_turn_15 = [0] * args.max_turn
     turn_result = []
     result = []
     user_size = test_env.ui_array.shape[0]
-    
+
     print('User size in UI_test: ', user_size)
     test_filename = 'Evaluate-epoch-{}-'.format(args.load_rl_epoch) + filename
 
@@ -68,7 +71,8 @@ def evaluate(args, kg, dataset, filename):
         for t in count():  # user  dialog
             if t == 14:
                 is_last_turn = True
-            action, sorted_actions = agent.select_action(state, cand, action_space, is_test=True, is_last_turn=is_last_turn)
+            action, sorted_actions = agent.select_action(state, cand, action_space, is_test=True,
+                                                         is_last_turn=is_last_turn)
             next_state, next_cand, action_space, reward, done = test_env.step(action.item(), sorted_actions)
             reward = torch.tensor([reward], device=args.device, dtype=torch.float)
             if done:
@@ -78,7 +82,7 @@ def evaluate(args, kg, dataset, filename):
             if done:
                 enablePrint()
                 if reward.item() == 1:  # recommend successfully
-                    SR_turn_15 = [v+1 if i>t  else v for i, v in enumerate(SR_turn_15) ]
+                    SR_turn_15 = [v + 1 if i > t else v for i, v in enumerate(SR_turn_15)]
                     if t < 5:
                         SR5 += 1
                         SR10 += 1
@@ -89,22 +93,24 @@ def evaluate(args, kg, dataset, filename):
                     else:
                         SR15 += 1
                     # HDCG
-                    Rank += (1/math.log(t+3,2) + (1/math.log(t+2,2)-1/math.log(t+3,2))/math.log(done+1,2))
+                    Rank += (1 / math.log(t + 3, 2) + (1 / math.log(t + 2, 2) - 1 / math.log(t + 3, 2)) / math.log(
+                        done + 1, 2))
                 else:
                     # HDCG
                     Rank += 0
-                AvgT += t+1
+                AvgT += t + 1
                 break
-        
-        if (user_num+1) % args.observe_num == 0 and user_num > 0:
-            SR = [SR5/args.observe_num, SR10/args.observe_num, SR15/args.observe_num, AvgT / args.observe_num, Rank / args.observe_num]
-            SR_TURN = [i/args.observe_num for i in SR_turn_15]
+
+        if (user_num + 1) % args.observe_num == 0 and user_num > 0:
+            SR = [SR5 / args.observe_num, SR10 / args.observe_num, SR15 / args.observe_num, AvgT / args.observe_num,
+                  Rank / args.observe_num]
+            SR_TURN = [i / args.observe_num for i in SR_turn_15]
             print('Total evalueation epoch_uesr:{}'.format(user_num + 1))
             print('Takes {} seconds to finish {}% of this task'.format(str(time.time() - start),
                                                                        float(user_num) * 100 / user_size))
             print('SR5:{}, SR10:{}, SR15:{}, AvgT:{}, Rank:{} '
                   'Total epoch_uesr:{}'.format(SR5 / args.observe_num, SR10 / args.observe_num, SR15 / args.observe_num,
-                                                AvgT / args.observe_num, Rank / args.observe_num, user_num + 1))
+                                               AvgT / args.observe_num, Rank / args.observe_num, user_num + 1))
             result.append(SR)
             turn_result.append(SR_TURN)
             SR5, SR10, SR15, AvgT, Rank = 0, 0, 0, 0, 0
@@ -120,7 +126,8 @@ def evaluate(args, kg, dataset, filename):
     SR_all = [SR5_mean, SR10_mean, SR15_mean, AvgT_mean, Rank_mean]
     save_rl_mtric(dataset=args.data_name, filename=filename, epoch=user_num, SR=SR_all, spend_time=time.time() - start,
                   mode='test')
-    save_rl_mtric(dataset=args.data_name, filename=test_filename, epoch=user_num, SR=SR_all, spend_time=time.time() - start,
+    save_rl_mtric(dataset=args.data_name, filename=test_filename, epoch=user_num, SR=SR_all,
+                  spend_time=time.time() - start,
                   mode='test')  # save RL SR
     print('save test evaluate successfully!')
 
@@ -131,7 +138,7 @@ def evaluate(args, kg, dataset, filename):
     print('SR5:{}, SR10:{}, SR15:{}, AvgT:{}, Rank:{}'.format(SR5_mean, SR10_mean, SR15_mean, AvgT_mean, Rank_mean))
     PATH = CHECKPOINT_DIR[args.data_name] + '/log/' + test_filename + '.txt'
     with open(PATH, 'a') as f:
-        #f.write('Training epocch:{}\n'.format(i_episode))
+        # f.write('Training epocch:{}\n'.format(i_episode))
         f.write('===========Test Turn===============\n')
         f.write('Testing {} user tuples\n'.format(user_num))
         for i in range(len(SRturn_all)):
@@ -154,10 +161,12 @@ def main():
 
     parser.add_argument('--data_name', type=str, default=LAST_FM, choices=[LAST_FM, LAST_FM_STAR, YELP, YELP_STAR],
                         help='One of {LAST_FM, LAST_FM_STAR, YELP, YELP_STAR}.')
-    parser.add_argument('--entropy_method', type=str, default='weight_entropy', help='entropy_method is one of {entropy, weight entropy}')
+    parser.add_argument('--entropy_method', type=str, default='weight_entropy',
+                        help='entropy_method is one of {entropy, weight entropy}')
     # Although the performance of 'weighted entropy' is better, 'entropy' is an alternative method considering the time cost.
     parser.add_argument('--max_turn', type=int, default=15, help='max conversation turn')
-    parser.add_argument('--cand_len_size', type=int, default=20, help='binary state size for the length of candidate items')
+    parser.add_argument('--cand_len_size', type=int, default=20,
+                        help='binary state size for the length of candidate items')
     parser.add_argument('--attr_num', type=int, help='the number of attributes')
     parser.add_argument('--mode', type=str, default='train', help='the mode in [train, test]')
     parser.add_argument('--ask_num', type=int, default=1, help='the number of features asked in a turn')
@@ -171,9 +180,9 @@ def main():
     parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')
     parser.add_argument('--fix_emb', type=bool, default=True, help='fix embedding or not')
     parser.add_argument('--embed', type=str, default='transe', help='pretrained embeddings')
-    parser.add_argument('--seq', type=str, default='transformer', choices=['rnn', 'transformer', 'mean'], help='sequential learning method')
+    parser.add_argument('--seq', type=str, default='transformer', choices=['rnn', 'transformer', 'mean'],
+                        help='sequential learning method')
     parser.add_argument('--gcn', action='store_false', help='use GCN or not')
-
 
     args = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -181,7 +190,7 @@ def main():
     print(args.device)
     print('data_set:{}'.format(args.data_name))
     kg = load_kg(args.data_name)
-    #reset attr_num
+    # reset attr_num
     feature_name = FeatureDict[args.data_name]
     feature_length = len(kg.G[feature_name].keys())
     print('dataset:{}, feature_length:{}'.format(args.data_name, feature_length))
@@ -193,6 +202,7 @@ def main():
     filename = 'train-datasets-{}-RL-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
         args.data_name, args.cand_num, args.cand_item_num, args.embed, args.seq, args.gcn)
     evaluate(args, kg, dataset, filename)
+
 
 if __name__ == '__main__':
     main()
