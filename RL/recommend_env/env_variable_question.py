@@ -260,37 +260,33 @@ class VariableRecommendEnv(object):
                  'adj': adj}
         return state
 
-    def step(self, attribute, items, embed=None, mode="train"):
-        if embed is not None:
-            self.ui_embeds = embed[:self.user_length + self.item_length]
-            self.feature_emb = embed[self.user_length + self.item_length:]
-        print('- - - - -turn:{}'.format(self.cur_conver_turn), 'step:{}- - - - -'.format(self.cur_conver_step))
+    def step(self, attribute, items, mode="train", infer=None):
+        if infer is None:
+            print('- - - - -turn:{}'.format(self.cur_conver_turn), 'step:{}- - - - -'.format(self.cur_conver_step))
+        else:
+            print('* * * * *turn:{}'.format(self.cur_conver_turn), 'infer Step:{}* * * * *'.format(self.cur_conver_step))
 
-        if self.cur_conver_turn == self.max_turn:
-            reward = self.reward_dict['until_T']
-            print('==> Maximum number of turns reached !')
-            done = 1
         # ASK
-        elif attribute is not None:
+        if attribute is not None:
             asked_feature = self._map_to_old_id(attribute)
             print('==> Action: ask features {}, max entropy feature {}'.format(asked_feature,
                                                                               self.reachable_feature[:self.cand_num]))
             # update user's profile:  user_acc_feature & user_rej_feature
-            reward, done, acc_rej = self._ask_update(asked_feature)
+            reward, done, acc_rej = self._ask_update(asked_feature, mode=mode, infer=infer)
             self._update_cand_items(asked_feature, acc_rej)  # update cand_items
         # RECOMMEND
         else:
 
             # ===================== rec update=========
             recom_items = []
-            if mode == "train":
+            if mode == "train" or (mode == "test" and infer is not None):
                 items = [items[-1]]
             for item in items:
                 if item < self.user_length + self.item_length:
                     recom_items.append(self._map_to_old_id(item))
                     if len(recom_items) == self.rec_num:
                         break
-            reward, done = self._recommend_update(recom_items)
+            reward, done = self._recommend_update(recom_items, mode=mode, infer=infer)
             # ========================================
             if reward > 0:
                 print('-->Recommend successfully!')
@@ -311,6 +307,8 @@ class VariableRecommendEnv(object):
             [self.reachable_feature.insert(0, v) for v in max_fea_id[::-1]]
 
         self.cur_conver_step += 1
+        if len(self.cand_items) == 0:
+            return None, None, None, reward, done
         return self._get_state(), self._get_cand(), self._get_action_space(), reward, done
 
     def _updata_reachable_feature(self):
@@ -361,7 +359,7 @@ class VariableRecommendEnv(object):
             cand_item_score.append(score)
         return cand_item_score
 
-    def _ask_update(self, asked_feature):
+    def _ask_update(self, asked_feature, mode="train", infer=None):
         '''
         :return: reward, acc_feature, rej_feature
         '''
@@ -369,7 +367,17 @@ class VariableRecommendEnv(object):
         # TODO datafram!     groundTruth == target_item features
         feature_groundtrue = self.kg.G['item'][self.target_item]['belong_to']
 
-        if asked_feature in feature_groundtrue:
+        if mode == "test":
+            if infer > 0.5:
+                acc_rej = True
+                self.user_acc_feature.append(asked_feature)
+                self.cur_node_set.append(asked_feature)
+                reward = self.reward_dict['ask_suc']
+            else:
+                acc_rej = False
+                self.user_rej_feature.append(asked_feature)
+                reward = self.reward_dict['ask_fail']
+        elif asked_feature in feature_groundtrue:
             acc_rej = True
             self.user_acc_feature.append(asked_feature)
             self.cur_node_set.append(asked_feature)
@@ -402,15 +410,40 @@ class VariableRecommendEnv(object):
         cand_item_score = self._item_score()
         item_score_tuple = list(zip(self.cand_items, cand_item_score))
         sort_tuple = sorted(item_score_tuple, key=lambda x: x[1], reverse=True)
-        self.cand_items, self.cand_item_score = zip(*sort_tuple)
+        if len(sort_tuple) == 0:
+            return
+        else:
+            self.cand_items, self.cand_item_score = zip(*sort_tuple)
 
-    def _recommend_update(self, recom_items):
+    def _recommend_update(self, recom_items, mode="train", infer=None):
         print('-->action: recommend items: ', recom_items)
         print(set(recom_items) - set(self.cand_items[: self.rec_num]))
         self.cand_items = list(self.cand_items)
         self.cand_item_score = list(self.cand_item_score)
-        # recom_items = self.cand_items[: self.rec_num]    # TOP k item to recommend
-        if self.target_item in recom_items:
+        if mode == 'test' and infer is not None:
+            if infer > 0.5:  # assume that user accept
+                # reward = self.reward_dict['rec_suc']
+                reward = self.reward_dict['rec_fail']
+            else:
+                reward = self.reward_dict['rec_fail']
+            for item in recom_items:
+                del self.item_feature_pair[item]
+                idx = self.cand_items.index(item)
+                self.cand_items.pop(idx)
+                self.cand_item_score.pop(idx)
+                # self.cand_items = self.cand_items[self.rec_num:]  #update candidate items
+            done = 0
+        elif self.target_item not in recom_items:
+            reward = self.reward_dict['rec_fail']
+            if len(self.cand_items) >= self.rec_num:
+                for item in recom_items:
+                    del self.item_feature_pair[item]
+                    idx = self.cand_items.index(item)
+                    self.cand_items.pop(idx)
+                    self.cand_item_score.pop(idx)
+                # self.cand_items = self.cand_items[self.rec_num:]  #update candidate items
+            done = 0
+        elif self.target_item in recom_items:
             reward = self.reward_dict['rec_suc']
             tmp_score = []
             for item in recom_items:
@@ -420,16 +453,6 @@ class VariableRecommendEnv(object):
             self.cand_item_score = tmp_score
             done = recom_items.index(self.target_item) + 1
             # done = 1
-        else:
-            reward = self.reward_dict['rec_fail']
-            if len(self.cand_items) > self.rec_num:
-                for item in recom_items:
-                    del self.item_feature_pair[item]
-                    idx = self.cand_items.index(item)
-                    self.cand_items.pop(idx)
-                    self.cand_item_score.pop(idx)
-                # self.cand_items = self.cand_items[self.rec_num:]  #update candidate items
-            done = 0
         return reward, done
 
     def _update_feature_entropy(self):

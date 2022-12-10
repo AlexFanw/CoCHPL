@@ -124,9 +124,9 @@ def evaluate(args, kg, dataset, filename):
     AvgT_mean = np.mean(np.array([item[3] for item in result]))
     Rank_mean = np.mean(np.array([item[4] for item in result]))
     SR_all = [SR5_mean, SR10_mean, SR15_mean, AvgT_mean, Rank_mean]
-    save_rl_mtric(dataset=args.data_name, filename=filename, epoch=user_num, SR=SR_all, spend_time=time.time() - start,
+    save_rl_mtric(dataset=args.data_name, filename=filename, epoch=user_num, results=SR_all, spend_time=time.time() - start,
                   mode='test')
-    save_rl_mtric(dataset=args.data_name, filename=test_filename, epoch=user_num, SR=SR_all,
+    save_rl_mtric(dataset=args.data_name, filename=test_filename, epoch=user_num, results=SR_all,
                   spend_time=time.time() - start,
                   mode='test')  # save RL SR
     print('save test evaluate successfully!')

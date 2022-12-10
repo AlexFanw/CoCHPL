@@ -112,11 +112,11 @@ class RecAgent(object):
 
         '''
         Double DQN
-        Q_policy - (r + GAMMA * [max Q_target(next) (1-termination) + Value (termination)])
+        Q_policy - (r + GAMMA * [ Q_target(next) * (1-termination) + Q_max * termination])
         '''
-        _, q_target_features = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_features, ask_agent)
+        _, q_next_features = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_features, ask_agent)
 
-        q_policy_items, q_target_items = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_items)
+        q_now_items, q_next_items = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_items)
 
         next_state_emb_batch = self.gcn_net(n_states)
         next_cand_batch = self.padding(n_cand_items)
@@ -125,16 +125,17 @@ class RecAgent(object):
 
         reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).to(self.device)
 
-        q_max = torch.maximum(q_target_features, q_target_items)
+        q_max = torch.maximum(q_next_features, q_next_items)
 
-        q_target = reward_batch + GAMMA * ((1-termination) * q_target_items + termination * q_max)
+        q_now_target = reward_batch + GAMMA * ((1-termination) * q_next_items + termination * q_max)
 
         # prioritized experience replay
-        errors = (q_policy_items - q_target).detach().cpu().squeeze().tolist()
+        errors = (q_now_items - q_now_target).detach().cpu().squeeze().tolist()
+        # print("REC:", errors)
         self.memory.update(idxs, errors)
 
         # mean squared error loss to minimize
-        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_policy_items, q_target)).mean()
+        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_now_items, q_now_target)).mean()
         self.optimizer.zero_grad()
         loss.backward()
         for param in self.policy_net.parameters():
@@ -177,18 +178,18 @@ class RecAgent(object):
             next_cand_emb_batch = self.gcn_net.embedding(next_cand_batch)
 
             value = self.value_net(state_emb_batch)
-            q_policy = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + value
+            q_now = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + value
 
             best_next_actions = torch.gather(input=next_cand_batch, dim=1,
                                              index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(
                                                  dim=1).view(
                                                  len(n_states), 1).to(self.device))
             best_next_actions_emb = self.gcn_net.embedding(best_next_actions)
-            q_target = torch.zeros((BATCH_SIZE, 1), device=self.device)
-            q_target[non_final_mask] = self.target_net(next_state_emb_batch, best_next_actions_emb,
+            q_next = torch.zeros((BATCH_SIZE, 1), device=self.device)
+            q_next[non_final_mask] = self.target_net(next_state_emb_batch, best_next_actions_emb,
                                                        choose_action=False).detach()
-            q_target += value
-            return q_policy, q_target
+            q_next += value
+            return q_now, q_next
         else:
             with torch.no_grad():
                 state_emb_batch = ask_agent.gcn_net(list(batch.state))
@@ -203,18 +204,18 @@ class RecAgent(object):
                 next_cand_emb_batch = ask_agent.gcn_net.embedding(next_cand_batch)
 
                 value = ask_agent.value_net(state_emb_batch)
-                q_policy = ask_agent.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + value
+                q_now = ask_agent.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + value
 
                 best_next_actions = torch.gather(input=next_cand_batch, dim=1,
                                                  index=ask_agent.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(
                                                      dim=1).view(
                                                      len(n_states), 1).to(ask_agent.device))
                 best_next_actions_emb = ask_agent.gcn_net.embedding(best_next_actions)
-                q_target = torch.zeros((BATCH_SIZE, 1), device=ask_agent.device)
-                q_target[non_final_mask] = ask_agent.target_net(next_state_emb_batch, best_next_actions_emb,
+                q_next = torch.zeros((BATCH_SIZE, 1), device=ask_agent.device)
+                q_next[non_final_mask] = ask_agent.target_net(next_state_emb_batch, best_next_actions_emb,
                                                            choose_action=False).detach()
-                q_target += value
-                return q_policy, q_target
+                q_next += value
+                return q_now, q_next
 
     def save_model(self, data_name, filename, epoch_user):
         save_rl_agent(dataset=data_name,

@@ -1,5 +1,6 @@
 import math
 
+import numpy as np
 from tqdm import tqdm
 from collections import namedtuple
 import argparse
@@ -23,7 +24,7 @@ Transition = namedtuple('Transition',
 
 def choose_option(ask_agent, rec_agent, state, cand):
     if cand["feature"] == [] or len(cand["item"]) < 10:
-        return 0, 1  # Recommend
+        return 0  # Recommend
     with torch.no_grad():
         state_emb = ask_agent.gcn_net([state])
         feature_cand = cand["feature"]
@@ -51,8 +52,20 @@ def choose_option(ask_agent, rec_agent, state, cand):
                                                                                                  choose_action=False).detach().numpy().squeeze())
         rec_Q = np.array(rec_score).dot(np.exp(rec_score) / sum(np.exp(rec_score)))
         # return ask_Q / (ask_Q + rec_Q), rec_Q / (ask_Q + rec_Q)
-        return math.exp(ask_Q) / (math.exp(ask_Q) + math.exp(rec_Q)), math.exp(rec_Q) / (
-                math.exp(ask_Q) + math.exp(rec_Q))
+        # return math.exp(ask_Q) / (math.exp(ask_Q) + math.exp(rec_Q)), math.exp(rec_Q) / (
+        #         math.exp(ask_Q) + math.exp(rec_Q))
+        if ask_Q > rec_Q:
+            return 1
+        else:
+            return 0
+
+
+def calculate_hdcg_item(t, done):
+    return 1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) / math.log(done + 1, 2)
+
+
+def calculate_hdcg_attribute(t, i):
+    return 1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) / math.log(i + 2, 2)
 
 
 def option_critic_pipeline(args, kg, dataset, filename):
@@ -112,12 +125,16 @@ def option_critic_pipeline(args, kg, dataset, filename):
         ask_agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
         rec_agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
         value_net.load_value_net(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
-        # TODO: gru_net.load_model()
 
     test_performance = []
     for epoch in range(1 + args.load_rl_epoch, args.max_epoch + 1):
+        if epoch % args.eval_num == 0:
+            SR15_mean = evaluate(args, kg, dataset, filename, epoch, ask_agent, rec_agent)
+            test_performance.append(SR15_mean)
         print("\nEpoch: {}, Total: {}".format(epoch, args.max_epoch))
-        SR5, SR10, SR15, AvgT, HDCG_item, total_reward = 0., 0., 0., 0., 0., 0.
+        HDCG_item, total_reward = 0., 0.
+        AvgT_list = []
+        Suc_Turn_list = []
         rec_step_list = []
         ask_step_list = []
         HDCG_attribute_list = []
@@ -125,9 +142,9 @@ def option_critic_pipeline(args, kg, dataset, filename):
         ask_loss = []
         rec_state_infer_loss = []
         ask_state_infer_loss = []
-        for i_episode in tqdm(range(args.sample_times), desc='sampling'):
+        for episode in tqdm(range(args.sample_times), desc='sampling'):
             blockPrint()
-            print('\n================Epoch:{} Episode:{}===================='.format(epoch, i_episode))
+            print('\n================Epoch:{} Episode:{}===================='.format(epoch, episode))
             state, cand, action_space = env.reset()
             epi_reward = 0
             done = 0
@@ -138,31 +155,25 @@ def option_critic_pipeline(args, kg, dataset, filename):
                 env.cur_conver_step = 1
                 if done:
                     break
-                print("Candidate: ", cand)
-                ask_Q, rec_Q = choose_option(ask_agent, rec_agent, state, cand)
-                print(ask_Q, rec_Q)
-                if ask_Q > rec_Q:
-                    option = 1
-                    print("\n————————Turn: ", t, "  Option: ASK————————")
-                else:
-                    option = 0
-                    print("\n————————Turn: ", t, "  Option: REC————————")
+                # print("Candidate: ", cand)
+                option = choose_option(ask_agent, rec_agent, state, cand)
 
                 '''
                 Intra Option choose: Select features / items
                 '''
                 # ASK
                 if option == 1:
+                    print("\n————————Turn: ", t, "  Option: ASK————————")
                     termination = False
                     ask_score = []
                     while not termination and not done:
-                        if env.cur_conver_step > args.max_ask_step:
-                            break
-
                         # Select Action
                         chosen_feature = ask_agent.select_action(state, cand["feature"], action_space["feature"])
                         # Env Interaction
                         next_state, next_cand, action_space, reward, done = env.step(chosen_feature.item(), None)
+                        # Reward Collection
+                        # if t == env.max_turn and reward < 0:
+                        #     reward = env.reward_dict["until_T"]
                         epi_reward += reward
                         ask_score.append(reward)
                         reward = torch.tensor([reward], device=args.device, dtype=torch.float)
@@ -171,49 +182,44 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         next_state_emb = ask_agent.gcn_net([next_state])
                         next_cand_emb = ask_agent.gcn_net.embedding(
                             torch.LongTensor([next_cand["feature"]]).to(args.device))
-                        term_score = rec_agent.termination_net(next_state_emb, next_cand_emb).item()
+                        term_score = ask_agent.termination_net(next_state_emb, next_cand_emb).item()
                         print("Termination Score:", term_score)
-                        if term_score >= 0.5:
-                            termination = True
-                        if next_cand["feature"] == []:
+                        if term_score >= 0.5 or next_cand["feature"] == [] or env.cur_conver_step == args.max_ask_step:
                             termination = True
 
                         # Push memory
-                        if done:
-                            next_state = None
-
                         ask_agent.memory.push(state, chosen_feature, next_state, reward,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
                         cand = next_cand
 
-                        if done:
-                            AvgT += t
+                        # After Done
+                        if done or (termination and t == env.max_turn):
+                            AvgT_list.append(t)
                             total_reward += epi_reward
                             break
 
                     # calculate HDCG Attribute
                     for i in range(len(ask_score)):
                         if ask_score[i] > 0:
-                            HDCG_attribute_list.append(
-                                (1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
-                                 math.log(i + 2, 2)))
+                            HDCG_attribute_list.append(calculate_hdcg_attribute(t, i))
 
                 # RECOMMEND
                 elif option == 0:
+                    print("\n————————Turn: ", t, "  Option: REC————————")
                     termination = False
                     items = []
-                    last_step = False
-                    while not termination and not done and not last_step:
-                        if env.cur_conver_step == args.max_rec_step:
-                            last_step = True
-
+                    while not termination and not done:
                         # Select Action
                         chosen_item = rec_agent.select_action(state, cand["item"], action_space["item"])
                         items.append(chosen_item.item())
 
                         # Env Interaction
                         next_state, next_cand, action_space, reward, done = env.step(None, items, mode="train")
+
+                        # Reward Collection
+                        # if t == env.max_turn and reward < 0:
+                        #     reward = env.reward_dict["until_T"]
                         epi_reward += reward
                         reward = torch.tensor([reward], device=args.device, dtype=torch.float)
 
@@ -223,50 +229,37 @@ def option_critic_pipeline(args, kg, dataset, filename):
                             torch.LongTensor([next_cand["item"]]).to(args.device))
                         term_score = rec_agent.termination_net(next_state_emb, next_cand_emb).item()
                         print("Termination Score:", term_score)
-                        if term_score >= 0.5:
+                        if term_score >= 0.5 or env.cur_conver_step == args.max_rec_step:
                             termination = True
 
                         # Push memory
-                        if done:
-                            next_state = None
-
                         rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
                         cand = next_cand
-                        if done:
+
+                        # After Done
+                        if done or (termination and t == 15):
                             # every episode update the target model to be same with model
                             if reward.item() == 1:  # recommend successfully
-                                if t < 5:
-                                    SR5 += 1
-                                    SR10 += 1
-                                    SR15 += 1
-                                elif t < 10:
-                                    SR10 += 1
-                                    SR15 += 1
-                                else:
-                                    SR15 += 1
-                                HDCG_item += (
-                                        1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /
-                                        math.log(done + 1, 2))
+                                Suc_Turn_list.append(t)
+                                HDCG_item += calculate_hdcg_item(t, done)
 
-                            AvgT += t
+                            AvgT_list.append(t)
                             total_reward += epi_reward
                             break
 
                 # Optimize Model
-                loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
-                if loss is not None:
-                    ask_loss.append(loss)
-                    ask_state_infer_loss.append(loss_state)
-                # ——————————————
+                if len(ask_agent.memory) >= args.batch_size and len(rec_agent.memory) >= args.batch_size:
+                    loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
+                    if loss is not None:
+                        ask_loss.append(loss)
+                        ask_state_infer_loss.append(loss_state)
 
-                # Optimize Model
-                loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
-                if loss is not None:
-                    rec_loss.append(loss)
-                    rec_state_infer_loss.append(loss_state)
-                # ——————————————
+                    loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
+                    if loss is not None:
+                        rec_loss.append(loss)
+                        rec_state_infer_loss.append(loss_state)
 
                 if option == 1:
                     ask_step_list.append(env.cur_conver_step - 1)
@@ -276,27 +269,30 @@ def option_critic_pipeline(args, kg, dataset, filename):
                 env.cur_conver_turn += 1
 
         enablePrint()  # Enable print function
+
+        # Analysis
+        stl = np.array(Suc_Turn_list)
         print('\nSample Times:{}'.format(args.sample_times))
         print('Recommend loss : {}'.format(statistics.mean(rec_loss)))
         print('Recommend State Infer loss : {}'.format(statistics.mean(rec_state_infer_loss)))
         print('Ask loss : {}'.format(statistics.mean(ask_loss)))
         print('Ask State Infer loss : {}'.format(statistics.mean(ask_state_infer_loss)))
-        print('SR5:{}\nSR10:{}\nSR15:{}\nHDCG_item:{}\nHDCG_attribute:{}\nrewards:{}\n'.format(SR5 / args.sample_times,
-                                                                                               SR10 / args.sample_times,
-                                                                                               SR15 / args.sample_times,
-                                                                                               HDCG_item / args.sample_times,
-                                                                                               statistics.mean(
-                                                                                                   HDCG_attribute_list),
-                                                                                               total_reward / args.sample_times))
+        print('SR5:{}\nSR10:{}\nSR15:{}\nHDCG_item:{}\nHDCG_attribute:{}\nrewards:{}\n'.format(
+            len(stl[stl <= 5]) / args.sample_times,
+            len(stl[stl <= 10]) / args.sample_times,
+            len(stl[stl <= 15]) / args.sample_times,
+            HDCG_item / args.sample_times,
+            statistics.mean(HDCG_attribute_list),
+            total_reward / args.sample_times))
         print('Avg_Turn:{}\nAvg_REC_Turn:{}\nAvg_ASK_Turn:{}\nAvg_REC_STEP:{}\nAvg_ASK_STEP:{}'.format(
-            AvgT / args.sample_times,
+            statistics.mean(AvgT_list),
             len(rec_step_list) / args.sample_times,
             len(ask_step_list) / args.sample_times,
             statistics.mean(rec_step_list),
             statistics.mean(ask_step_list)))
-        if epoch % args.eval_num == 0:
-            SR15_mean = evaluate(args, kg, dataset, agent, filename, epoch)
-            test_performance.append(SR15_mean)
+        # if epoch % args.eval_num == 0:
+        #     SR15_mean = evaluate(args, kg, dataset, agent, filename, epoch)
+        #     test_performance.append(SR15_mean)
         if epoch % args.save_num == 0:
             ask_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=epoch)
             rec_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=epoch)
@@ -314,8 +310,8 @@ def set_arguments():
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
     parser.add_argument('--hidden', type=int, default=100, help='number of samples')
     parser.add_argument('--memory_size', type=int, default=50000, help='size of memory ')
-    parser.add_argument('--data_name', type=str, default=LAST_FM, choices=[LAST_FM, LAST_FM_STAR, YELP, YELP_STAR],
-                        help='One of {LAST_FM, LAST_FM_STAR, YELP, YELP_STAR}.')
+    parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM, LAST_FM_STAR, YELP, YELP_STAR],
+                        help='One of {LAST_FM_STAR, YELP_STAR}.')
     parser.add_argument('--entropy_method', type=str, default='weight_entropy',
                         help='entropy_method is one of {entropy, weight entropy}')
     # Although the performance of 'weighted entropy' is better, 'entropy' is an alternative method considering the time cost.

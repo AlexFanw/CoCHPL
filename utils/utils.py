@@ -99,7 +99,7 @@ def save_rl_agent(dataset, model, filename, epoch_user, agent=""):
     print('RL policy model saved at {}'.format(model_file))
 
 
-def save_rl_mtric(dataset, filename, epoch, SR, spend_time, mode='train'):
+def save_rl_mtric(dataset, filename, epoch, results, spend_time, mode='train'):
     PATH = CHECKPOINT_DIR[dataset] + '/log/' + filename + '.txt'
     if not os.path.isdir(CHECKPOINT_DIR[dataset] + '/log/'):
         os.makedirs(CHECKPOINT_DIR[dataset] + '/log/')
@@ -107,11 +107,11 @@ def save_rl_mtric(dataset, filename, epoch, SR, spend_time, mode='train'):
         with open(PATH, 'a') as f:
             f.write('===========Train===============\n')
             f.write('Starting {} user epochs\n'.format(epoch))
-            f.write('training SR@5: {}\n'.format(SR[0]))
-            f.write('training SR@10: {}\n'.format(SR[1]))
-            f.write('training SR@15: {}\n'.format(SR[2]))
-            f.write('training Avg@T: {}\n'.format(SR[3]))
-            f.write('training hDCG: {}\n'.format(SR[4]))
+            f.write('training SR@5: {}\n'.format(results[0]))
+            f.write('training SR@10: {}\n'.format(results[1]))
+            f.write('training SR@15: {}\n'.format(results[2]))
+            f.write('training Avg@T: {}\n'.format(results[3]))
+            f.write('training hDCG: {}\n'.format(results[4]))
             f.write('Spending time: {}\n'.format(spend_time))
             f.write('================================\n')
             # f.write('1000 loss: {}\n'.format(loss_1000))
@@ -119,11 +119,11 @@ def save_rl_mtric(dataset, filename, epoch, SR, spend_time, mode='train'):
         with open(PATH, 'a') as f:
             f.write('===========Test===============\n')
             f.write('Testing {} user tuples\n'.format(epoch))
-            f.write('Testing SR@5: {}\n'.format(SR[0]))
-            f.write('Testing SR@10: {}\n'.format(SR[1]))
-            f.write('Testing SR@15: {}\n'.format(SR[2]))
-            f.write('Testing Avg@T: {}\n'.format(SR[3]))
-            f.write('Testing hDCG: {}\n'.format(SR[4]))
+            f.write('Testing SR@5: {}\n'.format(results[0]))
+            f.write('Testing SR@10: {}\n'.format(results[1]))
+            f.write('Testing SR@15: {}\n'.format(results[2]))
+            f.write('Testing Avg@T: {}\n'.format(results[3]))
+            f.write('Testing hDCG: {}\n'.format(results[4]))
             f.write('Testing time: {}\n'.format(spend_time))
             f.write('================================\n')
             # f.write('1000 loss: {}\n'.format(loss_1000))

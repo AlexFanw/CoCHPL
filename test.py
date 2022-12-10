@@ -1,11 +1,6 @@
+import numpy as np
 import torch
-
+from itertools import count
 if __name__ == "__main__":
-    x = torch.tensor([2.])
-    x.requires_grad_(True)
-    y = torch.tensor([2.])
-    a = x + y
-    b = a + y
-    c = a + b
-    print(c.requires_grad)
-    # out.backward()
+    a = np.array([0,1,2,3])
+    print(a[0 < a])
