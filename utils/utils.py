@@ -16,20 +16,14 @@ YELP = 'YELP'
 YELP_STAR = 'YELP_STAR'
 
 RAW_DATA_DIR = {
-    LAST_FM: './datasets/raw_data/lastfm',
-    YELP: './datasets/raw_data/yelp',
     LAST_FM_STAR: './datasets/raw_data/lastfm_star',
     YELP_STAR: './datasets/raw_data/yelp',
 }
 PROCESSED_DATA_DIR = {
-    LAST_FM: './datasets/processed_data/last_fm',
-    YELP: './datasets/processed_data/yelp',
     LAST_FM_STAR: './datasets/processed_data/last_fm_star',
     YELP_STAR: './datasets/processed_data/yelp_star',
 }
 CHECKPOINT_DIR = {
-    LAST_FM: './checkpoints/last_fm',
-    YELP: './checkpoints/yelp',
     LAST_FM_STAR: './checkpoints/last_fm_star',
     YELP_STAR: './checkpoints/yelp_star',
 }
@@ -111,20 +105,28 @@ def save_rl_mtric(dataset, filename, epoch, results, spend_time, mode='train'):
             f.write('training SR@10: {}\n'.format(results[1]))
             f.write('training SR@15: {}\n'.format(results[2]))
             f.write('training Avg@T: {}\n'.format(results[3]))
-            f.write('training hDCG: {}\n'.format(results[4]))
+            f.write('training Avg@T_REC: {}\n'.format(results[4]))
+            f.write('training Avg@T_ASK: {}\n'.format(results[5]))
+            f.write('training Avg@STEP_REC: {}\n'.format(results[6]))
+            f.write('training Avg@STEP_ASK: {}\n'.format(results[7]))
+            f.write('training hDCG: {}\n'.format(results[8]))
             f.write('Spending time: {}\n'.format(spend_time))
             f.write('================================\n')
             # f.write('1000 loss: {}\n'.format(loss_1000))
     elif mode == 'test':
         with open(PATH, 'a') as f:
-            f.write('===========Test===============\n')
-            f.write('Testing {} user tuples\n'.format(epoch))
+            f.write('===========Train===============\n')
+            f.write('Starting {} user epochs\n'.format(epoch))
             f.write('Testing SR@5: {}\n'.format(results[0]))
             f.write('Testing SR@10: {}\n'.format(results[1]))
             f.write('Testing SR@15: {}\n'.format(results[2]))
             f.write('Testing Avg@T: {}\n'.format(results[3]))
-            f.write('Testing hDCG: {}\n'.format(results[4]))
-            f.write('Testing time: {}\n'.format(spend_time))
+            f.write('Testing Avg@T_REC: {}\n'.format(results[4]))
+            f.write('Testing Avg@T_ASK: {}\n'.format(results[5]))
+            f.write('Testing Avg@STEP_REC: {}\n'.format(results[6]))
+            f.write('Testing Avg@STEP_ASK: {}\n'.format(results[7]))
+            f.write('Testing hDCG: {}\n'.format(results[8]))
+            f.write('Spending time: {}\n'.format(spend_time))
             f.write('================================\n')
             # f.write('1000 loss: {}\n'.format(loss_1000))
 

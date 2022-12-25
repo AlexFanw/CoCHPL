@@ -1,10 +1,9 @@
 import os
 import torch
 
-from RL.agent.agent import FeatureDict
+from RL.agent.ask_agent import FeatureDict
 from RL.RL_option_critic import set_arguments, option_critic_pipeline
 from utils.utils import load_kg, load_dataset
-
 
 if __name__ == '__main__':
     # Set arguments

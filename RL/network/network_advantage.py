@@ -27,4 +27,4 @@ class AdvantageNetwork(nn.Module):
             qsa = advantage - mean_adv
         else:
             qsa = advantage
-        return qsa
+        return qsa.squeeze()

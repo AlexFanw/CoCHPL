@@ -7,21 +7,21 @@ warnings.filterwarnings("ignore")
 
 
 class TerminationNetwork(torch.nn.Module):
-    def __init__(self, action_size, hidden_size=100):
+    def __init__(self, hidden_size=100):
         super(TerminationNetwork, self).__init__()
-        self.hidden = nn.Linear(hidden_size + action_size, hidden_size)
+        self.hidden = nn.Linear(hidden_size, hidden_size)
         self.output = torch.nn.Linear(hidden_size, 1)
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x, y):
-        x = x.repeat(1, y.size(1), 1)
-        x = torch.cat((x, y), dim=2)
+    def forward(self, x):
+        # x = x.repeat(1, 1, 1)
+        # x = torch.cat((x, y), dim=2)
         x = self.hidden(x)
         x = self.tanh(x)
         x = self.output(x)
         x = self.sigmoid(x)
-        return torch.mean(x.squeeze())
+        return x.squeeze()
 
 
 if __name__ == "__main__":

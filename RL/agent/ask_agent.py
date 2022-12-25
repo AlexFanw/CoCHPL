@@ -1,5 +1,7 @@
 from collections import namedtuple
 from itertools import chain
+
+import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 
@@ -7,23 +9,17 @@ from RL.network.network_advantage import AdvantageNetwork
 from RL.network.network_termination import TerminationNetwork
 from RL.recommend_env.env_variable_question import VariableRecommendEnv
 from utils.utils import *
-from RL.recommend_env.env_binary_question import BinaryRecommendEnv
-from RL.recommend_env.env_enumerated_question import EnumeratedRecommendEnv
 from graph.gcn import StateTransitionProb
 import warnings
 
 warnings.filterwarnings("ignore")
 
 RecommendEnv = {
-    LAST_FM: VariableRecommendEnv,
-    LAST_FM_STAR: BinaryRecommendEnv,
-    YELP: EnumeratedRecommendEnv,
-    YELP_STAR: BinaryRecommendEnv
+    LAST_FM_STAR:  VariableRecommendEnv,
+    YELP_STAR:  VariableRecommendEnv
 }
 FeatureDict = {
-    LAST_FM: 'feature',
     LAST_FM_STAR: 'feature',
-    YELP: 'large_feature',
     YELP_STAR: 'feature'
 }
 
@@ -39,7 +35,7 @@ class AskAgent(object):
         # GCN+Transformer Embedding
         self.gcn_net = gcn_net
         # Termination Network
-        self.termination_net = TerminationNetwork(action_size, hidden_size)
+        self.termination_net = TerminationNetwork(hidden_size)
         # Value Network
         self.value_net = value_net
         # Action Select
@@ -56,10 +52,13 @@ class AskAgent(object):
         # Optimizer
         self.optimizer = optim.Adam(chain(self.policy_net.parameters(),
                                           self.gcn_net.parameters(),
-                                          self.termination_net.parameters(),
                                           self.value_net.parameters()),
                                     lr=learning_rate,
                                     weight_decay=l2_norm)
+        # state optimizer
+        self.optimizer_termination = optim.Adam(chain(self.termination_net.parameters()),
+                                                lr=learning_rate,
+                                                weight_decay=l2_norm)
         self.memory = memory
         self.loss_func = nn.MSELoss()
         self.PADDING_ID = PADDING_ID
@@ -118,27 +117,27 @@ class AskAgent(object):
         _, q_next_items = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_items, rec_agent)
 
         next_state_emb_batch = self.gcn_net(n_states)
-        next_cand_batch = self.padding(n_cand_items)
-        next_cand_emb_batch = self.gcn_net.embedding(next_cand_batch)
-        termination = self.termination_net(next_state_emb_batch, next_cand_emb_batch)
+        termination = self.termination_net(next_state_emb_batch)
 
-        reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).to(self.device)
+        reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).squeeze().to(self.device)
 
         q_max = torch.maximum(q_next_features, q_next_items)
-
         q_now_target = reward_batch + GAMMA * ((1-termination) * q_next_features + termination * q_max)
         # prioritized experience replay
         errors = (q_now_features - q_now_target).detach().cpu().squeeze().tolist()
-        # print("ASK:", errors)
+        print("ASK:", errors)
         self.memory.update(idxs, errors)
 
         # mean squared error loss to minimize
         loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_now_features, q_now_target)).mean()
         self.optimizer.zero_grad()
+        self.optimizer_termination.zero_grad()
+        rec_agent.optimizer.zero_grad()
         loss.backward()
-        for param in self.policy_net.parameters():
-            param.grad.data.clamp_(-1, 1)
+
+        rec_agent.optimizer.step()
         self.optimizer.step()
+        self.optimizer_termination.step()
 
         '''
         State Transition
@@ -155,9 +154,11 @@ class AskAgent(object):
                 else:
                     rewards.append(torch.FloatTensor([1]))
         infer_reward = self.state_inferrer(states, torch.LongTensor(actions))
-        loss_reward = (self.loss_func(torch.stack(rewards), infer_reward)).mean()
+        loss_reward = (self.loss_func(infer_reward, torch.stack(rewards))).mean()
         self.optimizer_state.zero_grad()
         loss_reward.backward()
+        # for param in self.state_inferrer.gcn.parameters():
+        #     param.grad.data.clamp_(-1, 1)
         self.optimizer_state.step()
 
         return loss.data.item(), loss_reward.data.item()
@@ -174,46 +175,46 @@ class AskAgent(object):
             next_state_emb_batch = self.gcn_net(n_states)
             next_cand_batch = self.padding(n_cands)
             next_cand_emb_batch = self.gcn_net.embedding(next_cand_batch)
+            q_now = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + self.value_net(state_emb_batch)
 
-            value = self.value_net(state_emb_batch)
-            q_now = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + value
+            next_action_value = self.target_net(next_state_emb_batch, next_cand_emb_batch)
+            next_state_value = self.value_net(next_state_emb_batch)
+            next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().numpy()
+            next_exp = np.exp(next_score)
+            next_sum = np.expand_dims(next_exp.sum(axis=1), axis=1)
+            next_prop = next_exp / next_sum
+            ask_Q = np.multiply(next_prop, next_score).sum(axis=1)
+            q_next = torch.zeros((BATCH_SIZE), device=self.device)
+            q_next[non_final_mask] = torch.FloatTensor(ask_Q).to(self.device)
 
-            best_next_actions = torch.gather(input=next_cand_batch, dim=1,
-                                             index=self.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(
-                                                 dim=1).view(
-                                                 len(n_states), 1).to(self.device))
-            best_next_actions_emb = self.gcn_net.embedding(best_next_actions)
-            q_next = torch.zeros((BATCH_SIZE, 1), device=self.device)
-            q_next[non_final_mask] = self.target_net(next_state_emb_batch, best_next_actions_emb,
-                                                       choose_action=False).detach()
-            q_next += value
+            print("Q now:{}, Q next:{}, V next:{}".format(q_now[0], q_next[0], next_state_value[0]))
             return q_now, q_next
         else:
-            with torch.no_grad():
-                state_emb_batch = rec_agent.gcn_net(list(batch.state))
-                action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(rec_agent.device)  # [N*1]
+            state_emb_batch = rec_agent.gcn_net(list(batch.state))
+            action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(rec_agent.device)
 
-                action_emb_batch = rec_agent.gcn_net.embedding(action_batch)
-                non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                                        batch.next_state)), device=rec_agent.device, dtype=torch.uint8)
+            action_emb_batch = rec_agent.gcn_net.embedding(action_batch)
+            non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                                    batch.next_state)), device=rec_agent.device, dtype=torch.uint8)
 
-                next_state_emb_batch = rec_agent.gcn_net(n_states)
-                next_cand_batch = rec_agent.padding(n_cands)
-                next_cand_emb_batch = rec_agent.gcn_net.embedding(next_cand_batch)
+            next_state_emb_batch = rec_agent.gcn_net(n_states)
+            next_cand_batch = rec_agent.padding(n_cands)
+            next_cand_emb_batch = rec_agent.gcn_net.embedding(next_cand_batch)
 
-                value = rec_agent.value_net(state_emb_batch)
-                q_now = rec_agent.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + value
+            q_now = rec_agent.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + rec_agent.value_net(state_emb_batch)
 
-                best_next_actions = torch.gather(input=next_cand_batch, dim=1,
-                                                 index=rec_agent.policy_net(next_state_emb_batch, next_cand_emb_batch).argmax(
-                                                     dim=1).view(
-                                                     len(n_states), 1).to(rec_agent.device))
-                best_next_actions_emb = rec_agent.gcn_net.embedding(best_next_actions)
-                q_next = torch.zeros((BATCH_SIZE, 1), device=rec_agent.device)
-                q_next[non_final_mask] = rec_agent.target_net(next_state_emb_batch, best_next_actions_emb,
-                                                           choose_action=False).detach()
-                q_next += value
-                return q_now, q_next
+            next_action_value = rec_agent.target_net(next_state_emb_batch, next_cand_emb_batch)
+            next_state_value = rec_agent.value_net(next_state_emb_batch)
+            next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().numpy()
+            next_exp = np.exp(next_score)
+            next_sum = np.expand_dims(next_exp.sum(axis=1), axis=1)
+            next_prop = next_exp / next_sum
+            rec_Q = np.multiply(next_prop, next_score).sum(axis=1)
+            q_next = torch.zeros((BATCH_SIZE), device=rec_agent.device)
+            q_next[non_final_mask] = torch.FloatTensor(rec_Q).to(rec_agent.device)
+
+            print("Q now:{}, Q next:{}, V next:{}".format(q_now[0], q_next[0], next_state_value[0]))
+            return q_now, q_next
 
     def save_model(self, data_name, filename, epoch_user):
         save_rl_agent(dataset=data_name,

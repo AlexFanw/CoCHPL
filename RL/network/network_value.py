@@ -20,7 +20,7 @@ class ValueNetwork(nn.Module):
         """
         # V(s)
         x = F.relu(self.linear(x))
-        value = self.value(x).squeeze(dim=2)  # [N*1*1]
+        value = self.value(x).squeeze()  # [N*1*1]
         return value
 
     def load_value_net(self, data_name, filename, epoch_user):

@@ -49,8 +49,8 @@ class VariableRecommendEnv(object):
         # user_id  item_id   cur_step   cur_node_set
         self.user_id = None
         self.target_item = None
-        self.cur_conver_step = 0  # the number of conversation in current step
-        self.cur_conver_turn = 0  # the number of conversation in current turn
+        self.cur_conver_step = 1  # the number of conversation in current step
+        self.cur_conver_turn = 1  # the number of conversation in current turn
         self.cur_node_set = []  # maybe a node or a node set  /   normally save feature node
         # state veactor
         self.user_embed = None
@@ -83,24 +83,14 @@ class VariableRecommendEnv(object):
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
 
-        self.action_space = 2
-
-        # self.reward_dict = {
-        #     'ask_suc': 1,
-        #     'ask_fail': -0.1,
-        #     'rec_suc': 1,
-        #     'rec_fail': -0.033,
-        #     'until_T': -0.3,  # MAX_Turn
-        #     'cand_none': -0.1
-        # }
         # LAST FM STAR
         self.reward_dict = {
             'ask_suc': 1,
             'ask_fail': -0.1,
             'rec_suc': 1,
             'rec_fail': -0.1,
-            'until_T': -0.3,  # MAX_Turn
-            'cand_none': -0.1
+            'until_T': -1,  # MAX_Turn
+            'cand_none': -1
         }
 
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
@@ -144,8 +134,8 @@ class VariableRecommendEnv(object):
             self.ui_embeds = embed[:self.user_length + self.item_length]
             self.feature_emb = embed[self.user_length + self.item_length:]
         # init  user_id  item_id  cur_step   cur_node_set
-        self.cur_conver_step = 0  # reset cur_conversation step
-        self.cur_conver_turn = 0
+        self.cur_conver_step = 1  # reset cur_conversation step
+        self.cur_conver_turn = 1
         self.cur_node_set = []
         if self.mode == 'train':
             users = list(self.user_weight_dict.keys())
@@ -158,7 +148,7 @@ class VariableRecommendEnv(object):
             self.test_num += 1
 
         # init user's profile
-        print('-----------reset state vector------------')
+        # print('-----------reset state vector------------')
         print('\nuser_id:{}\ntarget_item:{}\ntarget_feature:{}'.format(self.user_id, self.target_item, self.kg.G['item'][self.target_item]['belong_to']))
         self.reachable_feature = []  # user reachable feature in cur_step
         self.user_acc_feature = []  # user accepted feature which asked by agent
@@ -177,8 +167,6 @@ class VariableRecommendEnv(object):
         self._update_cand_items(user_like_random_fea, acc_rej=True)
         self._updata_reachable_feature()  # self.reachable_feature = []
         # # self.conver_his[self.cur_conver_step] = self.history_dict['ask_suc']
-        self.cur_conver_step += 1
-        self.cur_conver_turn += 1
 
         print('=== init user prefer feature: {}'.format(self.cur_node_set))
         self._update_feature_entropy()  # update entropy
@@ -308,7 +296,7 @@ class VariableRecommendEnv(object):
 
         self.cur_conver_step += 1
         if len(self.cand_items) == 0:
-            return None, None, None, reward, done
+            return None, None, None, reward, 1
         return self._get_state(), self._get_cand(), self._get_action_space(), reward, done
 
     def _updata_reachable_feature(self):
@@ -387,7 +375,7 @@ class VariableRecommendEnv(object):
             self.user_rej_feature.append(asked_feature)
             reward = self.reward_dict['ask_fail']
 
-        if self.cand_items == []:  # candidate items is empty
+        if not self.cand_items:  # candidate items is empty
             done = 1
             reward = self.reward_dict['cand_none']
 
@@ -435,12 +423,12 @@ class VariableRecommendEnv(object):
             done = 0
         elif self.target_item not in recom_items:
             reward = self.reward_dict['rec_fail']
-            if len(self.cand_items) >= self.rec_num:
-                for item in recom_items:
-                    del self.item_feature_pair[item]
-                    idx = self.cand_items.index(item)
-                    self.cand_items.pop(idx)
-                    self.cand_item_score.pop(idx)
+            # if len(self.cand_items) >= self.rec_num:
+            for item in recom_items:
+                del self.item_feature_pair[item]
+                idx = self.cand_items.index(item)
+                self.cand_items.pop(idx)
+                self.cand_item_score.pop(idx)
                 # self.cand_items = self.cand_items[self.rec_num:]  #update candidate items
             done = 0
         elif self.target_item in recom_items:
