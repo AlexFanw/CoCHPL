@@ -5,27 +5,32 @@ import torch
 import os
 import sys
 
-# from knowledge_graph import KnowledgeGraph
-# from data_process import LastFmDataset
-# from KG_data_generate.lastfm_small_data_process import LastFmSmallDataset
-# from KG_data_generate.lastfm_knowledge_graph import KnowledgeGraph
 # Dataset names
-LAST_FM = 'LAST_FM'
 LAST_FM_STAR = 'LAST_FM_STAR'
-YELP = 'YELP'
 YELP_STAR = 'YELP_STAR'
+BOOK = 'BOOK'
+MOVIE = 'MOVIE'
+FOLKSCOPE = "FOLKSCOPE"
 
 RAW_DATA_DIR = {
     LAST_FM_STAR: './datasets/raw_data/lastfm_star',
     YELP_STAR: './datasets/raw_data/yelp',
+    BOOK: './datasets/raw_data/book',
+    MOVIE: './datasets/raw_data/movie',
+    FOLKSCOPE: './datasets/raw_data/folkscope',
 }
 PROCESSED_DATA_DIR = {
     LAST_FM_STAR: './datasets/processed_data/last_fm_star',
     YELP_STAR: './datasets/processed_data/yelp_star',
+    BOOK: './datasets/processed_data/book',
+    MOVIE: './datasets/processed_data/movie',
+    FOLKSCOPE: './datasets/processed_data/folkscope',
 }
 CHECKPOINT_DIR = {
     LAST_FM_STAR: './checkpoints/last_fm_star',
     YELP_STAR: './checkpoints/yelp_star',
+    BOOK: './checkpoints/book',
+    MOVIE: './checkpoints/movie',
 }
 
 
@@ -41,6 +46,7 @@ def save_dataset(dataset, dataset_obj):
 
 def load_dataset(dataset):
     dataset_file = PROCESSED_DATA_DIR[dataset] + '/dataset.pkl'
+    print(os.getcwd())
     dataset_obj = pickle.load(open(dataset_file, 'rb'))
     return dataset_obj
 
@@ -52,6 +58,7 @@ def save_kg(dataset, kg):
 
 def load_kg(dataset):
     kg_file = PROCESSED_DATA_DIR[dataset] + '/kg.pkl'
+    print(os.getcwd())
     kg = pickle.load(open(kg_file, 'rb'))
     return kg
 
@@ -62,7 +69,7 @@ def save_graph(dataset, graph):
 
 
 def load_graph(dataset):
-    graph_file = PROCESSED_DATA_DIRR[dataset] + '/graph.pkl'
+    graph_file = PROCESSED_DATA_DIR[dataset] + '/graph.pkl'
     graph = pickle.load(open(graph_file, 'rb'))
     return graph
 

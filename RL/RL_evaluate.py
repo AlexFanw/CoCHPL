@@ -24,8 +24,8 @@ def choose_option(ask_agent, rec_agent, state, cand):
             feature = ask_agent.gcn_net.embedding(feature)
             # print(ask_agent.value_net(state_emb))
             ask_score.append(
-                ask_agent.value_net(state_emb).detach().numpy().squeeze() + ask_agent.policy_net(state_emb, feature,
-                                                                                                 choose_action=False).detach().numpy().squeeze())
+                ask_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + ask_agent.policy_net(state_emb, feature,
+                                                                                                 choose_action=False).detach().cpu().numpy().squeeze())
         # ask_Q = np.array(ask_score).dot(np.exp(ask_score) / sum(np.exp(ask_score)))
         ask_Q = max(ask_score)
 
@@ -36,8 +36,8 @@ def choose_option(ask_agent, rec_agent, state, cand):
             item = torch.LongTensor(np.array(item).astype(int).reshape(-1, 1)).to(rec_agent.device)  # [N*1]
             item = rec_agent.gcn_net.embedding(item)
             rec_score.append(
-                rec_agent.value_net(state_emb).detach().numpy().squeeze() + rec_agent.policy_net(state_emb, item,
-                                                                                                 choose_action=False).detach().numpy().squeeze())
+                rec_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + rec_agent.policy_net(state_emb, item,
+                                                                                                 choose_action=False).detach().cpu().numpy().squeeze())
         # rec_Q = np.array(rec_score).dot(np.exp(rec_score) / sum(np.exp(rec_score)))
         rec_Q = max(rec_score)
         # return ask_Q / (ask_Q + rec_Q), rec_Q / (ask_Q + rec_Q)

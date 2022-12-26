@@ -20,10 +20,10 @@ RecommendEnv = {
 }
 
 FeatureDict = {
-    LAST_FM: 'feature',
     LAST_FM_STAR: 'feature',
-    YELP: 'large_feature',
-    YELP_STAR: 'feature'
+    YELP_STAR: 'feature',
+    BOOK:'feature',
+    MOVIE:'feature'
 }
 
 

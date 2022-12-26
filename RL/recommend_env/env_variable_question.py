@@ -83,12 +83,11 @@ class VariableRecommendEnv(object):
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
 
-        # LAST FM STAR
         self.reward_dict = {
             'ask_suc': 1,
-            'ask_fail': -0.1,
+            'ask_fail': -0.3,
             'rec_suc': 1,
-            'rec_fail': -0.1,
+            'rec_fail': -0.3,
             'until_T': -1,  # MAX_Turn
             'cand_none': -1
         }

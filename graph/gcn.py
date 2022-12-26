@@ -122,16 +122,17 @@ class GraphEncoder(Module):
 
 
 class StateTransitionProb(Module):
-    def __init__(self, gcn, state_emb_size, cand_emb_size):
+    def __init__(self, gcn, state_emb_size, cand_emb_size, device="cpu"):
         super(StateTransitionProb, self).__init__()
         self.gcn = gcn
         self.fc1 = nn.Linear(cand_emb_size + state_emb_size, cand_emb_size + state_emb_size)
         self.output = torch.nn.Linear(cand_emb_size + state_emb_size, 1)
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
+        self.device = device
     def forward(self, states, cands):
         states_embedding = self.gcn(states)
-        cands_embedding = self.gcn.embedding(cands)
+        cands_embedding = self.gcn.embedding(cands.to(self.device))
         x = torch.cat((states_embedding, cands_embedding), dim=2)
         x = self.tanh(x)
         x = self.output(x)

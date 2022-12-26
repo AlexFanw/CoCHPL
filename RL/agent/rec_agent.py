@@ -18,7 +18,9 @@ RecommendEnv = {
 }
 FeatureDict = {
     LAST_FM_STAR: 'feature',
-    YELP_STAR: 'feature'
+    YELP_STAR: 'feature',
+    BOOK:'feature',
+    MOVIE:'feature'
 }
 
 Transition = namedtuple('Transition',
@@ -31,19 +33,19 @@ class RecAgent(object):
         self.EPS_END = EPS_END
         self.device = device
         # GCN+Transformer Embedding
-        self.gcn_net = gcn_net
+        self.gcn_net = gcn_net.to(device)
         # self.ask_agent = ask_agent
         # # Termination Network
-        self.termination_net = TerminationNetwork(hidden_size)
+        self.termination_net = TerminationNetwork(hidden_size).to(device)
         # # Value Network
-        self.value_net = value_net
+        self.value_net = value_net.to(device)
         # Action Select
         self.policy_net = AdvantageNetwork(action_size, hidden_size).to(device)
         self.target_net = AdvantageNetwork(action_size, hidden_size).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         # state_inferrer
-        self.state_inferrer = StateTransitionProb(gcn=gcn_net, state_emb_size=hidden_size, cand_emb_size=action_size)
+        self.state_inferrer = StateTransitionProb(gcn=gcn_net, state_emb_size=hidden_size, cand_emb_size=action_size, device=device).to(device)
         # state optimizer
         self.optimizer_state = optim.Adam(chain(self.state_inferrer.parameters()),
                                           lr=learning_rate,
@@ -157,7 +159,7 @@ class RecAgent(object):
                 else:
                     rewards.append(torch.FloatTensor([1]))
         infer_reward = self.state_inferrer(states, torch.LongTensor(actions))
-        loss_reward = (self.loss_func(infer_reward, torch.stack(rewards))).mean()
+        loss_reward = (self.loss_func(infer_reward, torch.stack(rewards).to(self.device))).mean()
         self.optimizer_state.zero_grad()
         loss_reward.backward()
         # for param in self.state_inferrer.gcn.parameters():
@@ -183,7 +185,7 @@ class RecAgent(object):
 
             next_action_value = self.target_net(next_state_emb_batch, next_cand_emb_batch)
             next_state_value = self.value_net(next_state_emb_batch)
-            next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().numpy()
+            next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().cpu().numpy()
             next_exp = np.exp(next_score)
             next_sum = np.expand_dims(next_exp.sum(axis=1), axis=1)
             next_prop = next_exp / next_sum
@@ -209,7 +211,7 @@ class RecAgent(object):
 
             next_action_value = ask_agent.target_net(next_state_emb_batch, next_cand_emb_batch)
             next_state_value = ask_agent.value_net(next_state_emb_batch)
-            next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().numpy()
+            next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().cpu().numpy()
             next_exp = np.exp(next_score)
             next_sum = np.expand_dims(next_exp.sum(axis=1), axis=1)
             next_prop = next_exp / next_sum

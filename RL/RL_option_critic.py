@@ -30,12 +30,12 @@ def choose_option(ask_agent, rec_agent, state, cand):
         state_emb = ask_agent.gcn_net([state])
         feature_cand = cand["feature"]
         ask_score = []
-        value = ask_agent.value_net(state_emb).detach().numpy().squeeze()
+        value = ask_agent.value_net(state_emb).detach().cpu().numpy().squeeze()
         for feature in feature_cand:
             feature = torch.LongTensor(np.array(feature).astype(int).reshape(-1, 1)).to(ask_agent.device)  # [N*1]
             feature = ask_agent.gcn_net.embedding(feature)
             ask_score.append(
-                 value + ask_agent.policy_net(state_emb, feature, choose_action=False).detach().numpy().squeeze())
+                 value + ask_agent.policy_net(state_emb, feature, choose_action=False).detach().cpu().numpy().squeeze())
         ask_prop = np.exp(ask_score) / sum(np.exp(ask_score))
         ask_Q = np.array(ask_score).dot(ask_prop)
         # ask_Q = max(ask_score)
@@ -43,12 +43,12 @@ def choose_option(ask_agent, rec_agent, state, cand):
         state_emb = rec_agent.gcn_net([state])
         item_cand = cand["item"]
         rec_score = []
-        value = rec_agent.value_net(state_emb).detach().numpy().squeeze()
+        value = rec_agent.value_net(state_emb).detach().cpu().numpy().squeeze()
         for item in item_cand:
             item = torch.LongTensor(np.array(item).astype(int).reshape(-1, 1)).to(rec_agent.device)  # [N*1]
             item = rec_agent.gcn_net.embedding(item)
             rec_score.append(
-                 value + rec_agent.policy_net(state_emb, item, choose_action=False).detach().numpy().squeeze())
+                 value + rec_agent.policy_net(state_emb, item, choose_action=False).detach().cpu().numpy().squeeze())
         rec_prop = np.exp(rec_score) / sum(np.exp(rec_score))
         rec_Q = np.array(rec_score).dot(rec_prop)
         # rec_Q = max(rec_score)
@@ -128,7 +128,8 @@ def option_critic_pipeline(args, kg, dataset, filename):
         ask_agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
         rec_agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
         value_net.load_value_net(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
-
+    # if epoch % args.eval_num == 0:
+    # _ = rl_evaluate(args, kg, dataset, filename, 0, ask_agent, rec_agent)
     for epoch in range(1 + args.load_rl_epoch, args.max_epoch + 1):
         tt = time.time()
         start = tt
@@ -145,7 +146,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
         rec_state_infer_loss = []
         ask_state_infer_loss = []
         for episode in tqdm(range(args.sample_times), desc='sampling'):
-            # blockPrint()
+            blockPrint()
             print('\n================Epoch:{} Episode:{}===================='.format(epoch, episode))
             state, cand, action_space = env.reset()
             epi_reward = 0
@@ -294,7 +295,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
             rec_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=epoch)
             value_net.save_value_net(data_name=args.data_name, filename=filename, epoch_user=epoch)
         if epoch % args.eval_num == 0:
-            _ = rl_evaluate(args, kg, dataset, filename, epoch, ask_agent, rec_agent, 100)
+            _ = rl_evaluate(args, kg, dataset, filename, epoch, ask_agent, rec_agent)
     # print(test_performance)
 
 
@@ -309,7 +310,7 @@ def set_arguments():
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
     parser.add_argument('--hidden', type=int, default=100, help='number of samples')
     parser.add_argument('--memory_size', type=int, default=50000, help='size of memory ')
-    parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM, LAST_FM_STAR, YELP, YELP_STAR],
+    parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM_STAR, YELP_STAR, BOOK, MOVIE],
                         help='One of {LAST_FM_STAR, YELP_STAR}.')
     parser.add_argument('--entropy_method', type=str, default='weight_entropy',
                         help='entropy_method is one of {entropy, weight entropy}')
