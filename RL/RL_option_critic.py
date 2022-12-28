@@ -86,7 +86,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
                                args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                cand_num=args.cand_num, cand_item_num=args.cand_item_num,
                                attr_num=args.attr_num, mode='train',
-                               entropy_way=args.entropy_method, max_step=args.max_step)
+                               entropy_way=args.entropy_method)
 
     # User&Feature Embedding
     embed = torch.FloatTensor(
@@ -180,15 +180,17 @@ def option_critic_pipeline(args, kg, dataset, filename):
 
                         # Whether Termination
                         next_state_emb = ask_agent.gcn_net([next_state])
-                        next_cand_emb = ask_agent.gcn_net.embedding(torch.LongTensor([next_cand["feature"]]).to(args.device))
                         term_score = ask_agent.termination_net(next_state_emb).item()
                         print("Termination Score:", term_score)
                         if term_score >= 0.5 or next_cand["feature"] == [] or env.cur_conver_step > args.max_ask_step:
                             termination = True
                         if (termination or done) and t == env.max_turn and reward < 0:
                             reward = env.reward_dict["until_T"]
+                        # reward -= t*0.01
                         reward = torch.tensor([reward], device=args.device, dtype=torch.float)
                         # Push memory
+                        if done:
+                            next_state = None
                         ask_agent.memory.push(state, chosen_feature, next_state, reward,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
@@ -236,8 +238,11 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         # Push memory
                         if (termination or done) and t == env.max_turn and reward < 0:
                             reward = env.reward_dict["until_T"]
+                        if done:
+                            next_state = None
                         rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward,
                                               next_cand["item"], next_cand["feature"])
+                        # reward -= t * 0.1
                         reward = torch.tensor([reward], device=args.device, dtype=torch.float)
                         state = next_state
                         cand = next_cand
@@ -311,7 +316,7 @@ def set_arguments():
     parser.add_argument('--hidden', type=int, default=100, help='number of samples')
     parser.add_argument('--memory_size', type=int, default=50000, help='size of memory ')
     parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM_STAR, YELP_STAR, BOOK, MOVIE],
-                        help='One of {LAST_FM_STAR, YELP_STAR}.')
+                        help='One of {LAST_FM_STAR, YELP_STAR, BOOK, MOVIE}.')
     parser.add_argument('--entropy_method', type=str, default='weight_entropy',
                         help='entropy_method is one of {entropy, weight entropy}')
     # Although the performance of 'weighted entropy' is better, 'entropy' is an alternative method considering the time cost.
@@ -323,8 +328,8 @@ def set_arguments():
 
     parser.add_argument('--sample_times', type=int, default=100, help='the episodes of sampling')
     parser.add_argument('--max_epoch', type=int, default=100, help='max training epoch')
-    parser.add_argument('--eval_num', type=int, default=10, help='the number of steps to evaluate RL model and metric')
-    parser.add_argument('--save_num', type=int, default=10, help='the number of steps to save RL model and metric')
+    parser.add_argument('--eval_num', type=int, default=10, help='the number of epoch to evaluate RL model and metric')
+    parser.add_argument('--save_num', type=int, default=10, help='the number of epoch to save RL model and metric')
     parser.add_argument('--observe_num', type=int, default=1000, help='the number of steps to print metric')
     parser.add_argument('--cand_num', type=int, default=10, help='candidate sampling number')
     parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')

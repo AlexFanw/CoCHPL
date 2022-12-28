@@ -42,7 +42,7 @@ def evaluate(args, kg, dataset, filename, user_size=None):
                                args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                cand_num=args.cand_num, cand_item_num=args.cand_item_num,
                                attr_num=args.attr_num, mode='train',
-                               entropy_way=args.entropy_method, max_step=args.max_step)
+                               entropy_way=args.entropy_method)
 
     # User&Feature Embedding
     embed = torch.FloatTensor(

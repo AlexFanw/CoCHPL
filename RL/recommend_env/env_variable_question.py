@@ -8,11 +8,10 @@ from collections import Counter
 
 class VariableRecommendEnv(object):
     def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20,
-                 mode='train', entropy_way='weight entropy', max_step=50):
+                 mode='train', entropy_way='weight entropy'):
         self.data_name = data_name
         self.mode = mode
         self.seed = seed
-        self.max_step = max_step
         self.max_turn = max_turn  # MAX_TURN
         self.attr_state_num = attr_num
         self.kg = kg
@@ -82,15 +81,24 @@ class VariableRecommendEnv(object):
             self.ui_embeds = nn.Embedding(self.user_length + self.item_length, 64).weight.data.numpy()
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
-
-        self.reward_dict = {
-            'ask_suc': 1,
-            'ask_fail': -0.3,
-            'rec_suc': 1,
-            'rec_fail': -0.3,
-            'until_T': -1,  # MAX_Turn
-            'cand_none': -1
-        }
+        if self.data_name == "MOVIE":
+            self.reward_dict = {
+                'ask_suc': 1,
+                'ask_fail': -0.2,
+                'rec_suc': 1,
+                'rec_fail': -0.2,
+                'until_T': -1,  # MAX_Turn
+                'cand_none': -1
+            }
+        else:
+            self.reward_dict = {
+                'ask_suc': 1,
+                'ask_fail': -0.1,
+                'rec_suc': 1,
+                'rec_fail': -0.1,
+                'until_T': -1,  # MAX_Turn
+                'cand_none': -1
+            }
 
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
