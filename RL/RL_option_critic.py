@@ -146,7 +146,8 @@ def option_critic_pipeline(args, kg, dataset, filename):
         rec_state_infer_loss = []
         ask_state_infer_loss = []
         for episode in tqdm(range(args.sample_times), desc='sampling'):
-            blockPrint()
+            if args.block_print:
+                blockPrint()
             print('\n================Epoch:{} Episode:{}===================='.format(epoch, episode))
             state, cand, action_space = env.reset()
             epi_reward = 0
@@ -184,11 +185,14 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         print("Termination Score:", term_score)
                         if term_score >= 0.5 or next_cand["feature"] == [] or env.cur_conver_step > args.max_ask_step:
                             termination = True
-                        if (termination or done) and t == env.max_turn and reward < 0:
-                            reward = env.reward_dict["until_T"]
+
+                        # reward
+                        if (termination or done) and t == env.max_turn:
+                            reward = env.reward_dict["max_T"]
                         reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+
                         # Push memory
-                        if done:
+                        if (termination and t == env.max_turn) or done:
                             next_state = None
                         ask_agent.memory.push(state, chosen_feature, next_state, reward,
                                               next_cand["item"], next_cand["feature"])
@@ -229,19 +233,21 @@ def option_critic_pipeline(args, kg, dataset, filename):
 
                         # Whether Termination
                         next_state_emb = rec_agent.gcn_net([next_state])
-
                         term_score = rec_agent.termination_net(next_state_emb).item()
                         print("Termination Score:", term_score)
                         if term_score >= 0.5 or env.cur_conver_step > args.max_rec_step:
                             termination = True
-                        # Push memory
+
+                        # reward
                         if (termination or done) and t == env.max_turn and reward < 0:
-                            reward = env.reward_dict["until_T"]
-                        if done:
+                            reward = env.reward_dict["max_T"]
+                        reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+
+                        # Push memory
+                        if (termination and t == env.max_turn) or done:
                             next_state = None
                         rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward,
                                               next_cand["item"], next_cand["feature"])
-                        reward = torch.tensor([reward], device=args.device, dtype=torch.float)
                         state = next_state
                         cand = next_cand
 
@@ -304,6 +310,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
 
 def set_arguments():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--block_print', '-block_print', type=bool, default=True, help='Block Print or Not.')
     parser.add_argument('--eval_user_size', '-eval_user_size', type=int, default=100, help='user size of evaluation in training or testing.')
     parser.add_argument('--seed', '-seed', type=int, default=1, help='random seed.')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')

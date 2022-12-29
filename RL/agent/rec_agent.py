@@ -146,7 +146,6 @@ class RecAgent(object):
         self.optimizer.step()
         self.optimizer_termination.step()
 
-
         '''
         State Transition
         '''

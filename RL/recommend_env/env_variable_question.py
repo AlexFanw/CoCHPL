@@ -84,11 +84,10 @@ class VariableRecommendEnv(object):
         if self.data_name == "MOVIE":
             self.reward_dict = {
                 'ask_suc': 1,
-                'ask_fail': -0.2,
+                'ask_fail': -0.1,
                 'rec_suc': 1,
-                'rec_fail': -0.2,
-                'until_T': -1,  # MAX_Turn
-                'cand_none': -1
+                'rec_fail': -0.1,
+                'max_T': -1,  # MAX_Turn
             }
         else:
             self.reward_dict = {
@@ -96,8 +95,7 @@ class VariableRecommendEnv(object):
                 'ask_fail': -0.1,
                 'rec_suc': 1,
                 'rec_fail': -0.1,
-                'until_T': -1,  # MAX_Turn
-                'cand_none': -1
+                'max_T': -3,
             }
 
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
@@ -359,7 +357,6 @@ class VariableRecommendEnv(object):
         :return: reward, acc_feature, rej_feature
         '''
         done = 0
-        # TODO datafram!     groundTruth == target_item features
         feature_groundtrue = self.kg.G['item'][self.target_item]['belong_to']
 
         if mode == "test":
@@ -384,7 +381,7 @@ class VariableRecommendEnv(object):
 
         if not self.cand_items:  # candidate items is empty
             done = 1
-            reward = self.reward_dict['cand_none']
+            reward = self.reward_dict['ask_fail']
 
         return reward, done, acc_rej
 
@@ -417,7 +414,7 @@ class VariableRecommendEnv(object):
         self.cand_item_score = list(self.cand_item_score)
         if mode == 'test' and infer is not None:
             if infer > 0.5:  # assume that user accept
-                # reward = self.reward_dict['rec_suc']
+                # TODO: reward = self.reward_dict['rec_suc']
                 reward = self.reward_dict['rec_fail']
             else:
                 reward = self.reward_dict['rec_fail']
