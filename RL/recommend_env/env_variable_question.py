@@ -83,19 +83,19 @@ class VariableRecommendEnv(object):
         # self.feature_length = self.feature_emb.shape[0]-1
         if self.data_name == "MOVIE":
             self.reward_dict = {
-                'ask_suc': 1,
+                'ask_suc': 1e-5,
                 'ask_fail': -0.1,
-                'rec_suc': 1,
+                'rec_suc': 1e-5,
                 'rec_fail': -0.1,
                 'max_T': -1,  # MAX_Turn
             }
         else:
             self.reward_dict = {
-                'ask_suc': 1,
+                'ask_suc': 1e-5,
                 'ask_fail': -0.1,
-                'rec_suc': 1,
+                'rec_suc': 1e-5,
                 'rec_fail': -0.1,
-                'max_T': -3,
+                'max_T': -1,
             }
 
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
@@ -352,7 +352,7 @@ class VariableRecommendEnv(object):
             cand_item_score.append(score)
         return cand_item_score
 
-    def _ask_update(self, asked_feature, mode="train", infer=None):
+    def  _ask_update(self, asked_feature, mode="train", infer=None):
         '''
         :return: reward, acc_feature, rej_feature
         '''

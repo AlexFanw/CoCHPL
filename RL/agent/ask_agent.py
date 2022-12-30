@@ -1,3 +1,4 @@
+import statistics
 from collections import namedtuple
 from itertools import chain
 
@@ -31,9 +32,10 @@ Transition = namedtuple('Transition',
 
 class AskAgent(object):
     def __init__(self, device, memory, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
-                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01):
+                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01, alpha=0):
         self.EPS_END = EPS_END
         self.device = device
+        self.alpha = alpha
         # GCN+Transformer Embedding
         self.gcn_net = gcn_net.to(device)
         # Termination Network
@@ -130,10 +132,11 @@ class AskAgent(object):
         # q_now_target = reward_batch + GAMMA * ((1 - termination) * q_next_features + termination * q_max)
         q_now_target = reward_batch
         q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_features[non_final_mask] + termination * q_max[non_final_mask])
+        q_now_target += self.alpha * (q_now_features - q_now_target)
 
         # prioritized experience replay
         errors = (q_now_features - q_now_target).detach().cpu().squeeze().tolist()
-        print("ASK:", errors)
+        print("ASK:", statistics.mean(errors))
         self.memory.update(idxs, errors)
 
         # mean squared error loss to minimize

@@ -1,3 +1,4 @@
+import statistics
 from collections import namedtuple
 from itertools import chain
 import torch.nn as nn
@@ -29,9 +30,10 @@ Transition = namedtuple('Transition',
 
 class RecAgent(object):
     def __init__(self, device, memory, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
-                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01):
+                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01, alpha=0):
         self.EPS_END = EPS_END
         self.device = device
+        self.alpha = alpha
         # GCN+Transformer Embedding
         self.gcn_net = gcn_net.to(device)
         # self.ask_agent = ask_agent
@@ -128,10 +130,10 @@ class RecAgent(object):
         # q_now_target = reward_batch + GAMMA * ((1-termination) * q_next_items + termination * q_max)
         q_now_target = reward_batch
         q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_items[non_final_mask] + termination * q_max[non_final_mask])
-
+        q_now_target += self.alpha * (q_now_items - q_now_target)
         # prioritized experience replay
         errors = (q_now_items - q_now_target).detach().cpu().squeeze().tolist()
-        print("REC:", errors)
+        print("REC:", statistics.mean(errors))
         self.memory.update(idxs, errors)
 
         # mean squared error loss to minimize
@@ -140,7 +142,6 @@ class RecAgent(object):
         self.optimizer_termination.zero_grad()
         ask_agent.optimizer.zero_grad()
         loss.backward()
-
 
         ask_agent.optimizer.step()
         self.optimizer.step()
@@ -164,8 +165,7 @@ class RecAgent(object):
         loss_reward = (self.loss_func(infer_reward, torch.stack(rewards).to(self.device))).mean()
         self.optimizer_state.zero_grad()
         loss_reward.backward()
-        # for param in self.state_inferrer.gcn.parameters():
-        #     param.grad.data.clamp_(-1, 1)
+
         self.optimizer_state.step()
 
         return loss.data.item(), loss_reward.data.item()

@@ -108,7 +108,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
     # Ask Agent
     ask_agent = AskAgent(device=args.device, memory=ask_memory, action_size=embed.size(1),
                          hidden_size=args.hidden, gcn_net=ask_gcn_net, learning_rate=args.learning_rate,
-                         l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net)
+                         l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net, alpha=args.alpha)
     '''
     REC AGENT
     '''
@@ -121,7 +121,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
     # Rec Agent
     rec_agent = RecAgent(device=args.device, memory=rec_memory, action_size=embed.size(1),
                          hidden_size=args.hidden, gcn_net=rec_gcn_net, learning_rate=args.learning_rate,
-                         l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net)
+                         l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net, alpha=args.alpha)
     # load parameters
     if args.load_rl_epoch != 0:
         print('Loading Model in epoch {}'.format(args.load_rl_epoch))
@@ -145,14 +145,14 @@ def option_critic_pipeline(args, kg, dataset, filename):
         ask_loss = []
         rec_state_infer_loss = []
         ask_state_infer_loss = []
+        if args.block_print:
+            blockPrint()
         for episode in tqdm(range(args.sample_times), desc='sampling'):
-            if args.block_print:
-                blockPrint()
             print('\n================Epoch:{} Episode:{}===================='.format(epoch, episode))
             state, cand, action_space = env.reset()
             epi_reward = 0
             done = 0
-            for t in range(1, 16):  # Turn
+            for t in range(1, args.max_turn+1):  # Turn
                 '''
                 Over Option: Select Ask / Rec
                 '''
@@ -189,12 +189,12 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         # reward
                         if (termination or done) and t == env.max_turn:
                             reward = env.reward_dict["max_T"]
-                        reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+                        reward_ = torch.tensor([reward], device=args.device, dtype=torch.long)
 
                         # Push memory
-                        if (termination and t == env.max_turn) or done:
+                        if done or (termination and t == env.max_turn):
                             next_state = None
-                        ask_agent.memory.push(state, chosen_feature, next_state, reward,
+                        ask_agent.memory.push(state, chosen_feature, next_state, reward_,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
                         cand = next_cand
@@ -241,12 +241,12 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         # reward
                         if (termination or done) and t == env.max_turn and reward < 0:
                             reward = env.reward_dict["max_T"]
-                        reward = torch.tensor([reward], device=args.device, dtype=torch.float)
+                        reward_ = torch.tensor([reward], device=args.device, dtype=torch.float)
 
                         # Push memory
-                        if (termination and t == env.max_turn) or done:
+                        if done or (termination and t == env.max_turn):
                             next_state = None
-                        rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward,
+                        rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward_,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
                         cand = next_cand
@@ -254,7 +254,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         # After Done
                         if done or (termination and t == args.max_turn):
                             # every episode update the target model to be same with model
-                            if reward.item() == env.reward_dict["rec_suc"]:  # recommend successfully
+                            if reward == env.reward_dict["rec_suc"]:  # recommend successfully
                                 Suc_Turn_list.append(t)
                                 HDCG_item += calculate_hdcg_item(t, done)
 
@@ -286,14 +286,14 @@ def option_critic_pipeline(args, kg, dataset, filename):
         Avg_Turn = statistics.mean(AvgT_list)
         Avg_REC_Step = statistics.mean(rec_step_list)
         Avg_ASK_Step = statistics.mean(ask_step_list)
+        HDCG_attribute = statistics.mean(HDCG_attribute_list) if len(HDCG_attribute_list) else 0
         print('\nSample Times:{}'.format(args.sample_times))
         print('Recommend loss : {}'.format(statistics.mean(rec_loss)))
         print('Recommend State Infer loss : {}'.format(statistics.mean(rec_state_infer_loss)))
         print('Ask loss : {}'.format(statistics.mean(ask_loss)))
         print('Ask State Infer loss : {}'.format(statistics.mean(ask_state_infer_loss)))
         print('SR5:{}\nSR10:{}\nSR15:{}\nHDCG_item:{}\nHDCG_attribute:{}\nrewards:{}\n'.format(
-            SR5, SR10, SR15, HDCG_item / args.sample_times, statistics.mean(HDCG_attribute_list),
-            total_reward / args.sample_times))
+            SR5, SR10, SR15, HDCG_item / args.sample_times, HDCG_attribute, total_reward / args.sample_times))
         print('Avg_Turn:{}\nAvg_REC_Turn:{}\nAvg_ASK_Turn:{}\nAvg_REC_STEP:{}\nAvg_ASK_STEP:{}'.format(
             Avg_Turn, Avg_REC_Turn, Avg_ASK_Turn, Avg_REC_Step, Avg_ASK_Step))
 
@@ -310,7 +310,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
 
 def set_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--block_print', '-block_print', type=bool, default=True, help='Block Print or Not.')
+    parser.add_argument('--block_print', '-block_print', type=int, default=1, help='Block Print or Not.')
     parser.add_argument('--eval_user_size', '-eval_user_size', type=int, default=100, help='user size of evaluation in training or testing.')
     parser.add_argument('--seed', '-seed', type=int, default=1, help='random seed.')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')
@@ -318,6 +318,7 @@ def set_arguments():
     parser.add_argument('--gamma', type=float, default=0.999, help='reward discount factor.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate.')
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
+    parser.add_argument('--alpha', type=float, default=0, help='TD alpha.')
     parser.add_argument('--hidden', type=int, default=100, help='number of samples')
     parser.add_argument('--memory_size', type=int, default=50000, help='size of memory ')
     parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM_STAR, YELP_STAR, BOOK, MOVIE],
