@@ -129,7 +129,6 @@ class AskAgent(object):
 
         q_max = torch.maximum(q_next_features, q_next_items)
 
-        # q_now_target = reward_batch + GAMMA * ((1 - termination) * q_next_features + termination * q_max)
         q_now_target = reward_batch
         q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_features[non_final_mask] + termination * q_max[non_final_mask])
         q_now_target += self.alpha * (q_now_features - q_now_target)

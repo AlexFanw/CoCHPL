@@ -83,19 +83,19 @@ class VariableRecommendEnv(object):
         # self.feature_length = self.feature_emb.shape[0]-1
         if self.data_name == "MOVIE":
             self.reward_dict = {
-                'ask_suc': 1e-5,
-                'ask_fail': -0.1,
-                'rec_suc': 1e-5,
-                'rec_fail': -0.1,
-                'max_T': -1,  # MAX_Turn
+                'ask_suc': 1,
+                'ask_fail': -0.3,
+                'rec_suc': 1,
+                'rec_fail': -0.3,
+                'quit': -3,
             }
         else:
             self.reward_dict = {
-                'ask_suc': 1e-5,
+                'ask_suc': 1,
                 'ask_fail': -0.1,
-                'rec_suc': 1e-5,
+                'rec_suc': 1,
                 'rec_fail': -0.1,
-                'max_T': -1,
+                'quit': -1,
             }
 
         self.attr_count_dict = dict()  # This dict is used to calculate entropy

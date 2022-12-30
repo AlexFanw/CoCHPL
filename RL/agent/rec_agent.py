@@ -127,10 +127,10 @@ class RecAgent(object):
 
         q_max = torch.maximum(q_next_features, q_next_items)
 
-        # q_now_target = reward_batch + GAMMA * ((1-termination) * q_next_items + termination * q_max)
         q_now_target = reward_batch
         q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_items[non_final_mask] + termination * q_max[non_final_mask])
         q_now_target += self.alpha * (q_now_items - q_now_target)
+
         # prioritized experience replay
         errors = (q_now_items - q_now_target).detach().cpu().squeeze().tolist()
         print("REC:", statistics.mean(errors))

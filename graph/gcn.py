@@ -135,7 +135,7 @@ class StateTransitionProb(Module):
 
     def forward(self, states, cands):
         states_embedding = self.gcn(states)
-        cands_embedding = self.gcn.embedding(cands.to(self.device)).detach()
+        cands_embedding = self.gcn.embedding(cands.to(self.device))
         x = torch.cat((states_embedding, cands_embedding), dim=2)
         x = self.tanh(x)
         x = self.output(x)

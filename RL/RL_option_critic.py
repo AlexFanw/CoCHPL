@@ -188,12 +188,10 @@ def option_critic_pipeline(args, kg, dataset, filename):
 
                         # reward
                         if (termination or done) and t == env.max_turn:
-                            reward = env.reward_dict["max_T"]
-                        reward_ = torch.tensor([reward], device=args.device, dtype=torch.long)
+                            reward = env.reward_dict["quit"]
+                        reward_ = torch.tensor([reward], device=args.device, dtype=torch.float)
 
                         # Push memory
-                        if done or (termination and t == env.max_turn):
-                            next_state = None
                         ask_agent.memory.push(state, chosen_feature, next_state, reward_,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
@@ -240,12 +238,10 @@ def option_critic_pipeline(args, kg, dataset, filename):
 
                         # reward
                         if (termination or done) and t == env.max_turn and reward < 0:
-                            reward = env.reward_dict["max_T"]
+                            reward = env.reward_dict["quit"]
                         reward_ = torch.tensor([reward], device=args.device, dtype=torch.float)
 
                         # Push memory
-                        if done or (termination and t == env.max_turn):
-                            next_state = None
                         rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward_,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
