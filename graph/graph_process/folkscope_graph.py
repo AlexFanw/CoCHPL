@@ -7,7 +7,7 @@ class FolkscopeGraph(object):
         self._clean()
 
     def _load_entities(self, dataset):
-        print('load folkscope entities...')
+        print('load folkscope_v1 entities...')
         num_nodes = 0
         data_relations, _, _ = dataset.get_relation()  # entity_relations, relation_name, link_entity_type
         entity_list = list(data_relations.keys())
@@ -25,7 +25,7 @@ class FolkscopeGraph(object):
     def _load_knowledge(self, dataset):
         _, data_relations_name, link_entity_type = dataset.get_relation()  # entity_relations, relation_name, link_entity_type
         for relation in data_relations_name:
-            print('Load folkscope knowledge {}...'.format(relation))
+            print('Load folkscope_v1 knowledge {}...'.format(relation))
             data = getattr(dataset, relation).data
             num_edges = 0
             for he_id, te_ids in enumerate(data):  # head_entity_id , tail_entity_ids
