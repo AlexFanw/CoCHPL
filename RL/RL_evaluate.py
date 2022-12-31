@@ -71,8 +71,6 @@ def infer_features(ask_agent, args, infer_env, infer_state, infer_cand, infer_ac
             break
         # Whether Termination
         infer_next_state_emb = ask_agent.gcn_net([infer_next_state])
-        infer_next_cand_emb = ask_agent.gcn_net.embedding(
-            torch.LongTensor([infer_next_cand["feature"]]).to(args.device))
         term_score = ask_agent.termination_net(infer_next_state_emb).item()
         print("Termination Score:", term_score)
         if term_score >= 0.5:
@@ -111,8 +109,7 @@ def infer_items(rec_agent, args, infer_env, infer_state, infer_cand, infer_actio
             break
         # Whether Termination
         infer_next_state_emb = rec_agent.gcn_net([infer_next_state])
-        infer_next_cand_emb = rec_agent.gcn_net.embedding(
-            torch.LongTensor([infer_next_cand["item"]]).to(args.device))
+
         term_score = rec_agent.termination_net(infer_next_state_emb).item()
         print("Termination Score:", term_score)
         if term_score >= 0.5:
@@ -227,7 +224,7 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
                 state = next_state
                 cand = next_cand
                 if done:
-                    if reward == 1:  # recommend successfully
+                    if reward == env.reward_dict["rec_suc"]:  # recommend successfully
                         Suc_Turn_list.append(t)
                         HDCG_item = HDCG_item + (
                                 1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /

@@ -8,11 +8,10 @@ from collections import Counter
 
 class VariableRecommendEnv(object):
     def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20,
-                 mode='train', entropy_way='weight entropy', max_step=50):
+                 mode='train', entropy_way='weight entropy'):
         self.data_name = data_name
         self.mode = mode
         self.seed = seed
-        self.max_step = max_step
         self.max_turn = max_turn  # MAX_TURN
         self.attr_state_num = attr_num
         self.kg = kg
@@ -82,15 +81,22 @@ class VariableRecommendEnv(object):
             self.ui_embeds = nn.Embedding(self.user_length + self.item_length, 64).weight.data.numpy()
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
-
-        self.reward_dict = {
-            'ask_suc': 1,
-            'ask_fail': -0.3,
-            'rec_suc': 1,
-            'rec_fail': -0.3,
-            'until_T': -1,  # MAX_Turn
-            'cand_none': -1
-        }
+        if self.data_name == "MOVIE":
+            self.reward_dict = {
+                'ask_suc': 1,
+                'ask_fail': -0.3,
+                'rec_suc': 1,
+                'rec_fail': -0.3,
+                'quit': -3,
+            }
+        else:
+            self.reward_dict = {
+                'ask_suc': 1,
+                'ask_fail': -0.1,
+                'rec_suc': 1,
+                'rec_fail': -0.1,
+                'quit': -1,
+            }
 
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
@@ -346,12 +352,11 @@ class VariableRecommendEnv(object):
             cand_item_score.append(score)
         return cand_item_score
 
-    def _ask_update(self, asked_feature, mode="train", infer=None):
+    def  _ask_update(self, asked_feature, mode="train", infer=None):
         '''
         :return: reward, acc_feature, rej_feature
         '''
         done = 0
-        # TODO datafram!     groundTruth == target_item features
         feature_groundtrue = self.kg.G['item'][self.target_item]['belong_to']
 
         if mode == "test":
@@ -376,7 +381,7 @@ class VariableRecommendEnv(object):
 
         if not self.cand_items:  # candidate items is empty
             done = 1
-            reward = self.reward_dict['cand_none']
+            reward = self.reward_dict['ask_fail']
 
         return reward, done, acc_rej
 
@@ -409,7 +414,7 @@ class VariableRecommendEnv(object):
         self.cand_item_score = list(self.cand_item_score)
         if mode == 'test' and infer is not None:
             if infer > 0.5:  # assume that user accept
-                # reward = self.reward_dict['rec_suc']
+                # TODO: reward = self.reward_dict['rec_suc']
                 reward = self.reward_dict['rec_fail']
             else:
                 reward = self.reward_dict['rec_fail']

@@ -122,7 +122,7 @@ def save_rl_mtric(dataset, filename, epoch, results, spend_time, mode='train'):
             # f.write('1000 loss: {}\n'.format(loss_1000))
     elif mode == 'test':
         with open(PATH, 'a') as f:
-            f.write('===========Train===============\n')
+            f.write('===========Test===============\n')
             f.write('Starting {} user epochs\n'.format(epoch))
             f.write('Testing SR@5: {}\n'.format(results[0]))
             f.write('Testing SR@10: {}\n'.format(results[1]))

@@ -40,16 +40,17 @@ class GraphConvolution(Module):
 
 
 class GraphEncoder(Module):
-    def __init__(self, device, entity, emb_size, kg, embeddings=None, fix_emb=True, seq='rnn', gcn=True, hidden_size=100, layers=1, rnn_layer=1):
+    def __init__(self, device, entity, emb_size, kg, embeddings=None, fix_emb=True, seq='rnn', gcn=True,
+                 hidden_size=100, layers=1, rnn_layer=1):
         super(GraphEncoder, self).__init__()
-        self.embedding = nn.Embedding(entity, emb_size, padding_idx=entity-1)
+        self.embedding = nn.Embedding(entity, emb_size, padding_idx=entity - 1)
         if embeddings is not None:
             print("pre-trained embeddings")
             self.embedding.from_pretrained(embeddings, freeze=fix_emb)
         self.layers = layers
         self.user_num = len(kg.G['user'])
         self.item_num = len(kg.G['item'])
-        self.PADDING_ID = entity-1
+        self.PADDING_ID = entity - 1
         self.device = device
         self.seq = seq
         self.gcn = gcn
@@ -58,7 +59,9 @@ class GraphEncoder(Module):
         if self.seq == 'rnn':
             self.rnn = nn.GRU(hidden_size, hidden_size, rnn_layer, batch_first=True)
         elif self.seq == 'transformer':
-            self.transformer = nn.TransformerEncoder(encoder_layer=nn.TransformerEncoderLayer(d_model=hidden_size, nhead=4, dim_feedforward=400), num_layers=rnn_layer)
+            self.transformer = nn.TransformerEncoder(
+                encoder_layer=nn.TransformerEncoderLayer(d_model=hidden_size, nhead=4, dim_feedforward=400),
+                num_layers=rnn_layer)
 
         if self.gcn:
             indim, outdim = emb_size, hidden_size
@@ -91,24 +94,23 @@ class GraphEncoder(Module):
 
         seq_embeddings = []
         for s, o in zip(b_state, batch_output):
-            seq_embeddings.append(o[:len(s['cur_node']),:][None,:]) 
+            seq_embeddings.append(o[:len(s['cur_node']), :][None, :])
         if len(batch_output) > 1:
             seq_embeddings = self.padding_seq(seq_embeddings)
         seq_embeddings = torch.cat(seq_embeddings, dim=0)  # [N x L x d]
 
         if self.seq == 'rnn':
             _, h = self.rnn(seq_embeddings)
-            seq_embeddings = h.permute(1,0,2) #[N*1*D]
+            seq_embeddings = h.permute(1, 0, 2)  # [N*1*D]
         elif self.seq == 'transformer':
             seq_embeddings = torch.mean(self.transformer(seq_embeddings), dim=1, keepdim=True)
         elif self.seq == 'mean':
             seq_embeddings = torch.mean(seq_embeddings, dim=1, keepdim=True)
-        
+
         seq_embeddings = F.relu(self.fc1(seq_embeddings))
 
         return seq_embeddings
-    
-    
+
     def padding_seq(self, seq):
         padding_size = max([len(x[0]) for x in seq])
         padded_seq = []
@@ -116,8 +118,8 @@ class GraphEncoder(Module):
             cur_size = len(s[0])
             emb_size = len(s[0][0])
             new_s = torch.zeros((padding_size, emb_size)).to(self.device)
-            new_s[:cur_size,:] = s[0]
-            padded_seq.append(new_s[None,:])
+            new_s[:cur_size, :] = s[0]
+            padded_seq.append(new_s[None, :])
         return padded_seq
 
 
@@ -130,6 +132,7 @@ class StateTransitionProb(Module):
         self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
         self.device = device
+
     def forward(self, states, cands):
         states_embedding = self.gcn(states)
         cands_embedding = self.gcn.embedding(cands.to(self.device))
@@ -138,4 +141,3 @@ class StateTransitionProb(Module):
         x = self.output(x)
         x = self.sigmoid(x)
         return x.squeeze()
-
