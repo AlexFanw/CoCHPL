@@ -17,14 +17,14 @@ RAW_DATA_DIR = {
     YELP_STAR: './datasets/raw_data/yelp',
     BOOK: './datasets/raw_data/book',
     MOVIE: './datasets/raw_data/movie',
-    FOLKSCOPE: './datasets/raw_data/folkscope_v1',
+    FOLKSCOPE: './datasets/raw_data/folkscope',
 }
 PROCESSED_DATA_DIR = {
     LAST_FM_STAR: './datasets/processed_data/last_fm_star',
     YELP_STAR: './datasets/processed_data/yelp_star',
     BOOK: './datasets/processed_data/book',
     MOVIE: './datasets/processed_data/movie',
-    FOLKSCOPE: './datasets/processed_data/folkscope_v1',
+    FOLKSCOPE: './datasets/processed_data/folkscope',
 }
 CHECKPOINT_DIR = {
     LAST_FM_STAR: './checkpoints/last_fm_star',
