@@ -69,8 +69,8 @@ class RecAgent(object):
 
     def select_action(self, state, cand_items, items_space, is_test=False):
         state_emb = self.gcn_net([state])
-        cand_features = torch.LongTensor([cand_items]).to(self.device)
-        cand_emb = self.gcn_net.embedding(cand_features)
+        cand_items = torch.LongTensor([cand_items]).to(self.device)
+        cand_emb = self.gcn_net.embedding(cand_items)
         sample = random.random()
         eps_threshold = self.EPS_END
         '''
@@ -79,7 +79,7 @@ class RecAgent(object):
         if is_test or sample > eps_threshold:
             with torch.no_grad():
                 actions_value = self.policy_net(state_emb, cand_emb)
-                chosen_feature = cand_features[0][actions_value.argmax().item()]
+                chosen_feature = cand_items[0][actions_value.argmax().item()]
                 return chosen_feature
         else:
             shuffled_cand = items_space
