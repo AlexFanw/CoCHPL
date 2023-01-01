@@ -81,14 +81,18 @@ class VariableRecommendEnv(object):
             self.ui_embeds = nn.Embedding(self.user_length + self.item_length, 64).weight.data.numpy()
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
+        # self.reward_dict = {
+        #     'acc': 1,
+        #     'rej': -0.01,
+        #     'rec_suc': 1,
+        #     'quit': -1,
+        # } # ask step -> 1
         self.reward_dict = {
-            'acc': 1,
+            'acc': 0.01,
             'rej': -0.01,
             'rec_suc': 1,
             'quit': -1,
         }
-        if self.data_name == "MOVIE":
-            self.reward_dict["acc"] = 0.1
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
     def __load_rl_data__(self, data_name, mode):

@@ -1,6 +1,8 @@
 import statistics
 from collections import namedtuple
 from itertools import chain
+
+import torch
 import torch.nn as nn
 import torch.optim as optim
 
@@ -125,10 +127,12 @@ class RecAgent(object):
 
         reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).squeeze().to(self.device)
 
-        q_max = torch.maximum(q_next_features, q_next_items)
+        q_cat = torch.cat((q_next_features.unsqueeze(0), q_next_items.unsqueeze(0)), dim=0)
+        q_softmax_score = torch.softmax(q_cat, dim=0)
+        q_softmax = torch.sum(torch.multiply(q_softmax_score, q_cat), dim=0)
 
         q_now_target = reward_batch
-        q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_items[non_final_mask] + termination * q_max[non_final_mask])
+        q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_items[non_final_mask] + termination * q_softmax[non_final_mask])
         q_now_target += self.alpha * (q_now_items - q_now_target)
 
         # prioritized experience replay
@@ -143,9 +147,9 @@ class RecAgent(object):
         ask_agent.optimizer.zero_grad()
         loss.backward()
 
-        ask_agent.optimizer.step()
         self.optimizer.step()
         self.optimizer_termination.step()
+        ask_agent.optimizer.step()
 
         '''
         State Transition
