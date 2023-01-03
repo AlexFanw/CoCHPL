@@ -118,11 +118,12 @@ class AskAgent(object):
         Double DQN
         Q_policy - (r + GAMMA * [ Q_target(next) * (1-termination) + Q_max * termination])
         '''
-        q_now_features, q_next_features = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_features)
-
-        _, q_next_items = self.calculate_q_score(BATCH_SIZE, batch, n_states, n_cand_items, rec_agent)
-
         next_state_emb_batch = self.gcn_net(n_states)
+        state_emb_batch = self.gcn_net(list(batch.state))
+        q_now_features, q_next_features = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_features, state_emb_batch)
+
+        _, q_next_items = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_items, state_emb_batch, rec_agent)
+
         termination = self.termination_net(next_state_emb_batch)
 
         reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).squeeze().to(self.device)
@@ -173,21 +174,19 @@ class AskAgent(object):
 
         return loss.data.item(), loss_reward.data.item()
 
-    def calculate_q_score(self, BATCH_SIZE, batch, n_states, n_cands, rec_agent=None):
+    def calculate_q_score(self, BATCH_SIZE, batch, next_state_emb_batch, n_cands, state_emb_batch, rec_agent=None):
         if rec_agent == None:
-            state_emb_batch = self.gcn_net(list(batch.state))
             action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(self.device)  # [N*1]
 
             action_emb_batch = self.gcn_net.embedding(action_batch)
             non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                                     batch.next_state)), device=self.device, dtype=torch.uint8)
 
-            next_state_emb_batch = self.gcn_net(n_states)
             next_cand_batch = self.padding(n_cands)
             next_cand_emb_batch = self.gcn_net.embedding(next_cand_batch)
             q_now = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + self.value_net(state_emb_batch)
 
-            next_action_value = self.target_net(next_state_emb_batch, next_cand_emb_batch)
+            next_action_value = self.target_net(next_state_emb_batch, next_cand_emb_batch, choose_action=False)
             next_state_value = self.value_net(next_state_emb_batch)
             next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().cpu().numpy()
             next_exp = np.exp(next_score)
@@ -200,20 +199,18 @@ class AskAgent(object):
             print("Q now:{}, Q next:{}, V next:{}".format(q_now[0], q_next[0], next_state_value[0]))
             return q_now, q_next
         else:
-            state_emb_batch = rec_agent.gcn_net(list(batch.state))
             action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(rec_agent.device)
 
             action_emb_batch = rec_agent.gcn_net.embedding(action_batch)
             non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                                     batch.next_state)), device=rec_agent.device, dtype=torch.uint8)
 
-            next_state_emb_batch = rec_agent.gcn_net(n_states)
             next_cand_batch = rec_agent.padding(n_cands)
             next_cand_emb_batch = rec_agent.gcn_net.embedding(next_cand_batch)
 
             q_now = rec_agent.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + rec_agent.value_net(state_emb_batch)
 
-            next_action_value = rec_agent.target_net(next_state_emb_batch, next_cand_emb_batch)
+            next_action_value = rec_agent.target_net(next_state_emb_batch, next_cand_emb_batch, choose_action=False)
             next_state_value = rec_agent.value_net(next_state_emb_batch)
             next_score = (next_state_value.unsqueeze(-1) + next_action_value).detach().cpu().numpy()
             next_exp = np.exp(next_score)

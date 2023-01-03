@@ -97,30 +97,36 @@ def option_critic_pipeline(args, kg, dataset, filename):
     '''
     value_net = ValueNetwork().to(args.device)
     '''
+    GCN NET
+    '''
+    gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
+                           embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
+                           hidden_size=args.hidden).to(args.device)
+    '''
     ASK AGENT
     '''
-    # ASK GCN Transformer
-    ask_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-                               embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
-                               hidden_size=args.hidden).to(args.device)
+    # # ASK GCN Transformer
+    # ask_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
+    #                            embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
+    #                            hidden_size=args.hidden).to(args.device)
     # Ask Memory
     ask_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Ask Agent
     ask_agent = AskAgent(device=args.device, memory=ask_memory, action_size=embed.size(1),
-                         hidden_size=args.hidden, gcn_net=ask_gcn_net, learning_rate=args.learning_rate,
+                         hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate,
                          l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net, alpha=args.alpha)
     '''
     REC AGENT
     '''
-    # Rec GCN Transformer
-    rec_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-                               embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
-                               hidden_size=args.hidden).to(args.device)
+    # # Rec GCN Transformer
+    # rec_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
+    #                            embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
+    #                            hidden_size=args.hidden).to(args.device)
     # Rec Memory
     rec_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Rec Agent
     rec_agent = RecAgent(device=args.device, memory=rec_memory, action_size=embed.size(1),
-                         hidden_size=args.hidden, gcn_net=rec_gcn_net, learning_rate=args.learning_rate,
+                         hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate,
                          l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net, alpha=args.alpha)
     # load parameters
     if args.load_rl_epoch != 0:
@@ -192,8 +198,6 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         reward_ = torch.tensor([reward], device=args.device, dtype=torch.float)
 
                         # Push memory
-                        if done or (termination and t == env.max_turn):
-                            next_state = None
                         ask_agent.memory.push(state, chosen_feature, next_state, reward_,
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
@@ -244,7 +248,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         reward_ = torch.tensor([reward], device=args.device, dtype=torch.float)
 
                         # Push memory
-                        if done or (termination and t == env.max_turn):
+                        if done:
                             next_state = None
                         rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward_,
                                               next_cand["item"], next_cand["feature"])

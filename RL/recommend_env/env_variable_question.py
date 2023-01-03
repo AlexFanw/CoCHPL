@@ -88,10 +88,10 @@ class VariableRecommendEnv(object):
         #     'quit': -1,
         # } # ask step -> 1
         self.reward_dict = {
-            'acc': 0.01,
-            'rej': -0.01,
+            'acc': 1e-3,
+            'rej': -1e-2,
             'rec_suc': 1,
-            'quit': -1,
+            'quit': 0,
         }
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
