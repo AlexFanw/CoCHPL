@@ -27,7 +27,7 @@ FeatureDict = {
 }
 
 
-def evaluate(args, kg, dataset, filename, user_size=None):
+def evaluate(args, kg, dataset, filename):
     """RL Model Train
 
         :param args: some experiment settings
@@ -41,7 +41,7 @@ def evaluate(args, kg, dataset, filename, user_size=None):
     env = VariableRecommendEnv(kg, dataset,
                                args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
                                cand_num=args.cand_num, cand_item_num=args.cand_item_num,
-                               attr_num=args.attr_num, mode='train',
+                               attr_num=args.attr_num, mode='test',
                                entropy_way=args.entropy_method)
 
     # User&Feature Embedding

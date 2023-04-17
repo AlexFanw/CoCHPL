@@ -269,7 +269,7 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
 
     # SR_all = [SR5_mean, SR10_mean, SR15_mean, AvgT_mean, Rank_mean, reward_mean]
 
-    results = [SR[5], SR[10], SR[15], AvgT, Avg_REC_Turn, Avg_ASK_Turn, Avg_REC_STEP, Avg_ASK_STEP, HDCG_item / args.sample_times]
+    results = [SR[5], SR[10], SR[15], AvgT, Avg_REC_Turn, Avg_ASK_Turn, Avg_REC_STEP, Avg_ASK_STEP, HDCG_item]
     # Single Epoch file
     save_rl_mtric(dataset=args.data_name, filename=test_filename, epoch=epoch, results=results,
                   spend_time=time.time() - start, mode='test')  # save RL SR

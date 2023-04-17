@@ -81,14 +81,8 @@ class VariableRecommendEnv(object):
             self.ui_embeds = nn.Embedding(self.user_length + self.item_length, 64).weight.data.numpy()
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
-        # self.reward_dict = {
-        #     'acc': 1,
-        #     'rej': -0.01,
-        #     'rec_suc': 1,
-        #     'quit': -1,
-        # } # ask step -> 1
         self.reward_dict = {
-            'acc': 1e-3,
+            'acc': 1e-2,
             'rej': -1e-2,
             'rec_suc': 1,
             'quit': 0,

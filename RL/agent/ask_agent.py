@@ -32,7 +32,7 @@ Transition = namedtuple('Transition',
 
 class AskAgent(object):
     def __init__(self, device, memory, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
-                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01, alpha=0):
+                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01, alpha=1):
         self.EPS_END = EPS_END
         self.device = device
         self.alpha = alpha
@@ -124,7 +124,8 @@ class AskAgent(object):
 
         _, q_next_items = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_items, state_emb_batch, rec_agent)
 
-        termination = self.termination_net(next_state_emb_batch)
+        next_termination = self.termination_net(next_state_emb_batch)
+        termination = self.termination_net(state_emb_batch)
 
         reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).squeeze().to(self.device)
 
@@ -133,24 +134,30 @@ class AskAgent(object):
         q_softmax = torch.sum(torch.multiply(q_softmax_score, q_cat), dim=0)
 
         q_now_target = reward_batch
-        q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_features[non_final_mask] + termination * q_softmax[non_final_mask])
-        q_now_target += self.alpha * (q_now_features - q_now_target)
+        q_now_target[non_final_mask] += GAMMA * ((1-next_termination) * q_next_features[non_final_mask] + next_termination * q_softmax[non_final_mask])
+        q_now_target = q_now_features + self.alpha * (q_now_target - q_now_features)
 
         # prioritized experience replay
         errors = (q_now_features - q_now_target).detach().cpu().squeeze().tolist()
         print("ASK:", statistics.mean(errors))
         self.memory.update(idxs, errors)
 
-        # mean squared error loss to minimize
-        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_now_features, q_now_target)).mean()
+        # q network loss
+        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_now_features, q_now_target.detach())).mean()
+        # termination loss
+        next_termination_target = next_termination + self.alpha * next_termination * (q_softmax[non_final_mask] - q_next_features[non_final_mask] - 1)
+        loss_termination = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(next_termination, next_termination_target.detach())).mean()
+        # update
         self.optimizer.zero_grad()
         self.optimizer_termination.zero_grad()
-        rec_agent.optimizer.zero_grad()
-        loss.backward()
+        # rec_agent.optimizer.zero_grad()
 
-        rec_agent.optimizer.step()
+        loss.backward(retain_graph=True)
+        loss_termination.backward()
+
         self.optimizer.step()
         self.optimizer_termination.step()
+        # rec_agent.optimizer.step()
 
         '''
         State Transition
@@ -167,12 +174,12 @@ class AskAgent(object):
                 else:
                     rewards.append(torch.FloatTensor([1]))
         infer_reward = self.state_inferrer(states, torch.LongTensor(actions))
-        loss_reward = (self.loss_func(infer_reward, torch.stack(rewards).to(self.device))).mean()
+        loss_transition = (self.loss_func(infer_reward, torch.stack(rewards).to(self.device))).mean()
         self.optimizer_state.zero_grad()
-        loss_reward.backward()
+        loss_transition.backward()
         self.optimizer_state.step()
 
-        return loss.data.item(), loss_reward.data.item()
+        return loss.data.item() + loss_termination.data.item(), loss_transition.data.item()
 
     def calculate_q_score(self, BATCH_SIZE, batch, next_state_emb_batch, n_cands, state_emb_batch, rec_agent=None):
         if rec_agent == None:

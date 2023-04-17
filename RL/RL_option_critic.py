@@ -198,7 +198,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         reward_ = torch.tensor([reward], device=args.device, dtype=torch.float)
 
                         # Push memory
-                        ask_agent.memory.push(state, chosen_feature, next_state, reward_,
+                        ask_agent.memory.push(state, chosen_feature.cpu(), next_state, reward_.cpu(),
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
                         cand = next_cand
@@ -250,7 +250,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         # Push memory
                         if done:
                             next_state = None
-                        rec_agent.memory.push(state, torch.tensor(chosen_item), next_state, reward_,
+                        rec_agent.memory.push(state, torch.tensor(chosen_item).cpu(), next_state, reward_.cpu(),
                                               next_cand["item"], next_cand["feature"])
                         state = next_state
                         cand = next_cand
@@ -322,7 +322,7 @@ def set_arguments():
     parser.add_argument('--gamma', type=float, default=0.999, help='reward discount factor.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate.')
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
-    parser.add_argument('--alpha', type=float, default=0, help='TD alpha.')
+    parser.add_argument('--alpha', type=float, default=1, help='TD alpha.')
     parser.add_argument('--hidden', type=int, default=100, help='number of samples')
     parser.add_argument('--memory_size', type=int, default=50000, help='size of memory ')
     parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM_STAR, YELP_STAR, BOOK, MOVIE],
@@ -331,7 +331,6 @@ def set_arguments():
                         help='entropy_method is one of {entropy, weight entropy}')
     # Although the performance of 'weighted entropy' is better, 'entropy' is an alternative method considering the time cost.
     parser.add_argument('--max_turn', type=int, default=15, help='max conversation turn')
-    parser.add_argument('--max_step', type=int, default=50, help='max conversation turn')
     parser.add_argument('--attr_num', type=int, help='the number of attributes')
     parser.add_argument('--mode', type=str, default='train', help='the mode in [train, test]')
     parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading RL model')

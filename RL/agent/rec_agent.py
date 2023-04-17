@@ -22,8 +22,8 @@ RecommendEnv = {
 FeatureDict = {
     LAST_FM_STAR: 'feature',
     YELP_STAR: 'feature',
-    BOOK:'feature',
-    MOVIE:'feature'
+    BOOK: 'feature',
+    MOVIE: 'feature'
 }
 
 Transition = namedtuple('Transition',
@@ -32,7 +32,7 @@ Transition = namedtuple('Transition',
 
 class RecAgent(object):
     def __init__(self, device, memory, action_size, hidden_size, gcn_net, learning_rate, l2_norm,
-                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01, alpha=0):
+                 PADDING_ID, value_net, EPS_END=0.1, tau=0.01, alpha=1):
         self.EPS_END = EPS_END
         self.device = device
         self.alpha = alpha
@@ -49,7 +49,8 @@ class RecAgent(object):
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         # state_inferrer
-        self.state_inferrer = StateTransitionProb(gcn=gcn_net, state_emb_size=hidden_size, cand_emb_size=action_size, device=device).to(device)
+        self.state_inferrer = StateTransitionProb(gcn=gcn_net, state_emb_size=hidden_size, cand_emb_size=action_size,
+                                                  device=device).to(device)
         # state optimizer
         self.optimizer_state = optim.Adam(chain(self.state_inferrer.parameters()),
                                           lr=learning_rate,
@@ -120,11 +121,14 @@ class RecAgent(object):
         '''
         next_state_emb_batch = self.gcn_net(n_states)
         state_emb_batch = self.gcn_net(list(batch.state))
-        _, q_next_features = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_features, state_emb_batch, ask_agent)
+        _, q_next_features = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_features,
+                                                    state_emb_batch, ask_agent)
 
-        q_now_items, q_next_items = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_items, state_emb_batch)
+        q_now_items, q_next_items = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_items,
+                                                           state_emb_batch)
 
-        termination = self.termination_net(next_state_emb_batch)
+        next_termination = self.termination_net(next_state_emb_batch)
+        termination = self.termination_net(state_emb_batch)
 
         reward_batch = torch.FloatTensor(np.array(batch.reward).astype(float).reshape(-1, 1)).squeeze().to(self.device)
 
@@ -133,24 +137,34 @@ class RecAgent(object):
         q_softmax = torch.sum(torch.multiply(q_softmax_score, q_cat), dim=0)
 
         q_now_target = reward_batch
-        q_now_target[non_final_mask] += GAMMA * ((1-termination) * q_next_items[non_final_mask] + termination * q_softmax[non_final_mask])
-        q_now_target += self.alpha * (q_now_items - q_now_target)
+        q_now_target[non_final_mask] += GAMMA * ((1 - next_termination) * q_next_items[non_final_mask]
+                                                 + next_termination * q_softmax[non_final_mask])
+        q_now_target = q_now_items + self.alpha * (q_now_target - q_now_items)
 
         # prioritized experience replay
         errors = (q_now_items - q_now_target).detach().cpu().squeeze().tolist()
         print("REC:", statistics.mean(errors))
         self.memory.update(idxs, errors)
 
-        # mean squared error loss to minimize
-        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_now_items, q_now_target)).mean()
+        # q network loss
+        loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_now_items,
+                                                                               q_now_target.detach())).mean()
+        # termination loss
+        next_termination_target = next_termination + self.alpha * next_termination * \
+                                  (q_softmax[non_final_mask] - q_next_items[non_final_mask] - 1)
+        loss_termination = (torch.FloatTensor(is_weights).to(self.device)
+                            * self.loss_func(next_termination, next_termination_target.detach())).mean()
+
         self.optimizer.zero_grad()
         self.optimizer_termination.zero_grad()
-        ask_agent.optimizer.zero_grad()
-        loss.backward()
+        # ask_agent.optimizer.zero_grad()
+
+        loss.backward(retain_graph=True)
+        loss_termination.backward()
 
         self.optimizer.step()
         self.optimizer_termination.step()
-        ask_agent.optimizer.step()
+        # ask_agent.optimizer.step()
 
         '''
         State Transition
@@ -167,13 +181,13 @@ class RecAgent(object):
                 else:
                     rewards.append(torch.FloatTensor([1]))
         infer_reward = self.state_inferrer(states, torch.LongTensor(actions))
-        loss_reward = (self.loss_func(infer_reward, torch.stack(rewards).to(self.device))).mean()
+        loss_transition = (self.loss_func(infer_reward, torch.stack(rewards).to(self.device))).mean()
         self.optimizer_state.zero_grad()
-        loss_reward.backward()
+        loss_transition.backward()
 
         self.optimizer_state.step()
 
-        return loss.data.item(), loss_reward.data.item()
+        return loss.data.item() + loss_termination.data.item(), loss_transition.data.item()
 
     def calculate_q_score(self, BATCH_SIZE, batch, next_state_emb_batch, n_cands, state_emb_batch, ask_agent=None):
         if ask_agent == None:
@@ -186,7 +200,8 @@ class RecAgent(object):
             next_cand_batch = self.padding(n_cands)
             next_cand_emb_batch = self.gcn_net.embedding(next_cand_batch)
 
-            q_now = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + self.value_net(state_emb_batch)
+            q_now = self.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + self.value_net(
+                state_emb_batch)
 
             next_action_value = self.target_net(next_state_emb_batch, next_cand_emb_batch, choose_action=False)
             next_state_value = self.value_net(next_state_emb_batch)
@@ -201,7 +216,8 @@ class RecAgent(object):
             print("Q now:{}, Q next:{}, V next:{}".format(q_now[0], q_next[0], next_state_value[0]))
             return q_now, q_next
         else:
-            action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(ask_agent.device)  # [N*1]
+            action_batch = torch.LongTensor(np.array(batch.action).astype(int).reshape(-1, 1)).to(
+                ask_agent.device)  # [N*1]
 
             action_emb_batch = ask_agent.gcn_net.embedding(action_batch)
             non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
@@ -210,7 +226,8 @@ class RecAgent(object):
             next_cand_batch = ask_agent.padding(n_cands)
             next_cand_emb_batch = ask_agent.gcn_net.embedding(next_cand_batch)
 
-            q_now = ask_agent.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + ask_agent.value_net(state_emb_batch)
+            q_now = ask_agent.policy_net(state_emb_batch, action_emb_batch, choose_action=False) + ask_agent.value_net(
+                state_emb_batch)
 
             next_action_value = ask_agent.target_net(next_state_emb_batch, next_cand_emb_batch, choose_action=False)
             next_state_value = ask_agent.value_net(next_state_emb_batch)

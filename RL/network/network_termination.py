@@ -25,5 +25,6 @@ class TerminationNetwork(torch.nn.Module):
 
 
 if __name__ == "__main__":
-    t = TerminationNetwork(2,1)
-    print(t(torch.Tensor([[1,2]])))
+    # t = TerminationNetwork(2,1)
+    # print(t(torch.Tensor([[1,2]])))
+    pass
