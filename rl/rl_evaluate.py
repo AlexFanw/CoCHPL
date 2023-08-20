@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from utils.utils import *
-from RL.recommend_env.env_variable_question import VariableRecommendEnv
+from rl.recommend_env.env_variable_question import VariableRecommendEnv
 from tqdm import tqdm
 
 
@@ -272,7 +272,7 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
     results = [SR[5], SR[10], SR[15], AvgT, Avg_REC_Turn, Avg_ASK_Turn, Avg_REC_STEP, Avg_ASK_STEP, HDCG_item]
     # Single Epoch file
     save_rl_mtric(dataset=args.data_name, filename=test_filename, epoch=epoch, results=results,
-                  spend_time=time.time() - start, mode='test')  # save RL SR
+                  spend_time=time.time() - start, mode='test')  # save rl SR
 
     PATH = CHECKPOINT_DIR[args.data_name] + '/log/' + detail_filename + '.txt'
     with open(PATH, 'a') as f:

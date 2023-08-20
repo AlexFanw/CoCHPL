@@ -7,13 +7,13 @@ from collections import namedtuple
 import argparse
 import statistics
 
-from RL.agent.ask_agent import AskAgent
-from RL.agent.rec_agent import RecAgent
-from RL.RL_memory import ReplayMemoryPER
-from RL.network.network_value import ValueNetwork
+from rl.agent.ask_agent import AskAgent
+from rl.agent.rec_agent import RecAgent
+from rl.rl_memory import ReplayMemoryPER
+from rl.network.network_value import ValueNetwork
 from utils.utils import *
-from RL.recommend_env.env_variable_question import VariableRecommendEnv
-from RL.RL_evaluate import rl_evaluate
+from rl.recommend_env.env_variable_question import VariableRecommendEnv
+from rl.rl_evaluate import rl_evaluate
 from graph.gcn import GraphEncoder
 import warnings
 
@@ -72,7 +72,7 @@ def calculate_hdcg_attribute(t, i):
 
 
 def option_critic_pipeline(args, kg, dataset, filename):
-    """RL Model Train
+    """rl Model Train
 
     :param args: some experiment settings
     :param kg: knowledge graph
@@ -333,12 +333,12 @@ def set_arguments():
     parser.add_argument('--max_turn', type=int, default=15, help='max conversation turn')
     parser.add_argument('--attr_num', type=int, help='the number of attributes')
     parser.add_argument('--mode', type=str, default='train', help='the mode in [train, test]')
-    parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading RL model')
+    parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading rl model')
 
     parser.add_argument('--sample_times', type=int, default=100, help='the episodes of sampling')
     parser.add_argument('--max_epoch', type=int, default=100, help='max training epoch')
-    parser.add_argument('--eval_num', type=int, default=10, help='the number of epoch to evaluate RL model and metric')
-    parser.add_argument('--save_num', type=int, default=10, help='the number of epoch to save RL model and metric')
+    parser.add_argument('--eval_num', type=int, default=10, help='the number of epoch to evaluate rl model and metric')
+    parser.add_argument('--save_num', type=int, default=10, help='the number of epoch to save rl model and metric')
     parser.add_argument('--observe_num', type=int, default=1000, help='the number of steps to print metric')
     parser.add_argument('--cand_num', type=int, default=10, help='candidate sampling number')
     parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')

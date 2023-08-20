@@ -6,9 +6,9 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 
-from RL.network.network_advantage import AdvantageNetwork
-from RL.network.network_termination import TerminationNetwork
-from RL.recommend_env.env_variable_question import VariableRecommendEnv
+from rl.network.network_advantage import AdvantageNetwork
+from rl.network.network_termination import TerminationNetwork
+from rl.recommend_env.env_variable_question import VariableRecommendEnv
 from utils.utils import *
 from graph.gcn import StateTransitionProb
 import warnings
