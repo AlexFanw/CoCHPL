@@ -92,7 +92,7 @@ class VariableRecommendEnv(object):
     def __load_rl_data__(self, data_name, mode):
         if mode == 'train':
             # load the interaction records between User and Item
-            with open(os.path.join(RAW_DATA_DIR[data_name], 'UI_Interaction_data/review_dict_valid.json'),
+            with open(os.path.join(RAW_DATA_DIR[data_name], 'UI_Interaction_data/review_dict_train.json'),
                       encoding='utf-8') as f:
                 print('train_data: load RL valid datasets')
                 mydict = json.load(f)

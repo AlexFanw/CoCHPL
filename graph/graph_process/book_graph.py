@@ -26,7 +26,7 @@ class BookGraph(object):
         self.__get_feature__()
 
     def __get_user__(self):
-        with open('./datasets/raw_data/book/UI_Interaction_data/review_dict_valid.json', 'r', encoding='utf-8') as f:
+        with open('./datasets/raw_data/book/UI_Interaction_data/review_dict_train.json', 'r', encoding='utf-8') as f:
             ui_train = json.load(f)
             self.G['user'] = {}
             for user in tqdm(ui_train):

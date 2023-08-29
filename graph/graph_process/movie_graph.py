@@ -15,7 +15,7 @@ class MovieGraph(object):
         import os
         os.chdir("../")
         print(os.getcwd())
-        with open('./datasets/raw_data/movie/UI_Interaction_data/review_dict_test.json', 'r',
+        with open('./datasets/raw_data/movie/UI_Interaction_data/review_dict_train.json', 'r',
                   encoding='utf-8') as f:
             ui_train = json.load(f)
             self.G['user'] = {}
