@@ -1,12 +1,12 @@
 
 
-from RL.RL_evaluate import rl_evaluate
-from RL.RL_memory import ReplayMemoryPER
-from RL.RL_option_critic import set_arguments
-from RL.agent.ask_agent import AskAgent
-from RL.agent.rec_agent import RecAgent
-from RL.network.network_value import ValueNetwork
-from RL.recommend_env.env_variable_question import VariableRecommendEnv
+from rl.rl_evaluate import rl_evaluate
+from rl.rl_memory import ReplayMemoryPER
+from rl.rl_option_critic import set_arguments
+from rl.agent.ask_agent import AskAgent
+from rl.agent.rec_agent import RecAgent
+from rl.network.network_value import ValueNetwork
+from rl.recommend_env.env_variable_question import VariableRecommendEnv
 from utils.utils import *
 
 # TODO select env
@@ -28,7 +28,7 @@ FeatureDict = {
 
 
 def evaluate(args, kg, dataset, filename):
-    """RL Model Train
+    """rl Model Train
 
         :param args: some experiment settings
         :param kg: knowledge graph
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     dataset = load_dataset(args.data_name)
 
     # Evaluate
-    filename = 'train-datasets-{}-RL-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
+    filename = 'train-datasets-{}-rl-cand_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
         args.data_name, args.cand_num, args.cand_item_num, args.embed, args.seq, args.gcn)
     # Evaluate(args, kg, dataset, filename)
     evaluate(args, kg, dataset, filename)
