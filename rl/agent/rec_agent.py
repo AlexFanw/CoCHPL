@@ -121,6 +121,7 @@ class RecAgent(object):
         '''
         next_state_emb_batch = self.gcn_net(n_states)
         state_emb_batch = self.gcn_net(list(batch.state))
+        q_value = self.value_net(state_emb_batch)
         _, q_next_features = self.calculate_q_score(BATCH_SIZE, batch, next_state_emb_batch, n_cand_features,
                                                     state_emb_batch, ask_agent)
 
@@ -136,9 +137,14 @@ class RecAgent(object):
         q_softmax_score = torch.softmax(q_cat, dim=0)
         q_softmax = torch.sum(torch.multiply(q_softmax_score, q_cat), dim=0)
 
+        q_max, _ = torch.max(torch.cat((q_next_features.unsqueeze(0), q_next_items.unsqueeze(0))), dim=0)
+        
         q_now_target = reward_batch
-        q_now_target[non_final_mask] += GAMMA * ((1 - next_termination) * q_next_items[non_final_mask]
-                                                 + next_termination * q_softmax[non_final_mask])
+        q_estim = q_max
+        # q_estim = q_value
+        # q_estim = q_softmax
+        q_now_target[non_final_mask] += GAMMA * ((1-next_termination) * q_next_items[non_final_mask]
+                                                 + next_termination * q_estim[non_final_mask])
         q_now_target = q_now_items + self.alpha * (q_now_target - q_now_items)
 
         # prioritized experience replay

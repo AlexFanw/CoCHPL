@@ -218,6 +218,12 @@ def option_critic_pipeline(args, kg, dataset, filename):
                     if loss is not None:
                         ask_loss.append(loss)
                         ask_state_infer_loss.append(loss_state)
+                        
+                    # # Optimize
+                    # loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
+                    # if loss is not None:
+                    #     rec_loss.append(loss)
+                    #     rec_state_infer_loss.append(loss_state)
 
                 # RECOMMEND
                 elif option == 0:
@@ -270,6 +276,12 @@ def option_critic_pipeline(args, kg, dataset, filename):
                     if loss is not None:
                         rec_loss.append(loss)
                         rec_state_infer_loss.append(loss_state)
+                        
+                    # # Optimize
+                    # loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
+                    # if loss is not None:
+                    #     ask_loss.append(loss)
+                    #     ask_state_infer_loss.append(loss_state)
 
                 if option == 1:
                     ask_step_list.append(env.cur_conver_step - 1)
