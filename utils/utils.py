@@ -150,11 +150,14 @@ def save_rl_model_log(dataset, filename, epoch, epoch_loss, train_len):
 
 def set_random_seed(seed):
     random.seed(seed)
+    os.environ['PYTHONHASHSEED'] =str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
+        print("CUDA is Available")
+        torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-
+    torch.backends.cudnn.deterministic =True
 
 # Disable
 def blockPrint():
