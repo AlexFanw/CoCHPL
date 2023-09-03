@@ -140,7 +140,8 @@ class AskAgent(object):
         q_estim = q_max
         # q_estim = q_value
         # q_estim = q_softmax
-        q_now_target[non_final_mask] += GAMMA * ((1-next_termination) * q_next_features[non_final_mask] + next_termination * q_estim[non_final_mask])
+        q_now_target[non_final_mask] += GAMMA * ((1-next_termination) * q_next_features[non_final_mask]
+                                                 +   next_termination * q_estim[non_final_mask])
         q_now_target = q_now_features + self.alpha * (q_now_target - q_now_features)
 
         # prioritized experience replay
