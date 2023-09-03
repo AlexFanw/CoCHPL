@@ -260,4 +260,4 @@ class AskAgent(object):
             new_c = np.ones((pad_size)) * self.PADDING_ID
             new_c[:cur_size] = c
             padded_cand.append(new_c)
-        return torch.LongTensor(padded_cand).to(self.device)
+        return torch.LongTensor(np.array(padded_cand).astype(int)).to(self.device)
