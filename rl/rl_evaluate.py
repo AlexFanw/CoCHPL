@@ -209,7 +209,7 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
             if done:
                 break
             print("Candidate: ", cand)
-            option = choose_option(ask_agent, rec_agent, state, cand)
+            option = choose_option(ask_agent, rec_agent, state, cand, args.option_strategy)
 
             '''
             Intra Option choose: Select features / items

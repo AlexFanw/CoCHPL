@@ -66,7 +66,7 @@ def choose_option(ask_agent, rec_agent, state, cand, option_strategy=0, decay_st
                         math.exp(-1. * decay_step * EPS_DECAY)
         soft_random = random.random()
         # print(decay_step)
-        print("eps:_threshold:{}".format(eps_threshold))
+        print("eps_threshold:{}".format(eps_threshold))
         if soft_random > eps_threshold:
             if ask_Q > rec_Q:
                 return 1
@@ -336,8 +336,8 @@ def set_arguments():
     # Epoch Setting
     parser.add_argument('--sample_times', type=int, default=100, help='the episodes of sampling')
     parser.add_argument('--max_epoch', type=int, default=100, help='max training epoch')
-    parser.add_argument('--eval_epoch_num', type=int, default=10, help='the number of epoch to evaluate rl model and metric')
-    parser.add_argument('--save_epoch_num', type=int, default=10, help='the number of epoch to save rl model and metric')
+    parser.add_argument('--eval_epoch_num', type=int, default=5, help='the number of epoch to evaluate rl model and metric')
+    parser.add_argument('--save_epoch_num', type=int, default=5, help='the number of epoch to save rl model and metric')
     
     # Evaluate Setting
     parser.add_argument('--eval_user_size', '-eval_user_size', type=int, default=100, help='user size of evaluation in training or testing.')

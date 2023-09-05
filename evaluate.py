@@ -97,20 +97,18 @@ if __name__ == '__main__':
     print('DEVICE: {}'.format(args.device))
     print('DATASET: {}'.format(args.data_name))
 
-    # Load kg.pkl
+    # Load dataset
     kg = load_kg(args.data_name)
+    dataset = load_dataset(args.data_name)
     feature_name = FeatureDict[args.data_name]
     feature_length = len(kg.G[feature_name].keys())
+    args.attr_num = feature_length
+    
     print('FEATURE NUMBER: {}'.format(feature_length))
-    args.attr_num = feature_length  # set attr_num  = feature_length
     print('ATTRIBUTE NUMBER', args.attr_num)
     print('ENTROPY METHOD:', args.entropy_method)
-
-    # Load dataset.pkl
-    dataset = load_dataset(args.data_name)
 
     # Evaluate
     filename = 'train-datasets-{}-rl-cand_feature_num-{}-cand_item_num-{}-embed-{}-seq-{}-gcn-{}'.format(
         args.data_name, args.cand_feature_num, args.cand_item_num, args.embed, args.seq, args.gcn)
-    # Evaluate(args, kg, dataset, filename)
     evaluate(args, kg, dataset, filename)
