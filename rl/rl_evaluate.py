@@ -90,7 +90,7 @@ def choose_option(ask_agent, rec_agent, state, cand, option_strategy=0):
 
 
 def infer_features(ask_agent, args, infer_env, infer_state, infer_cand, infer_action_space):
-    blockPrint()
+    # blockPrint()
     done = 0
     termination = False
     chosen_features = []
@@ -113,8 +113,8 @@ def infer_features(ask_agent, args, infer_env, infer_state, infer_cand, infer_ac
         infer_next_state_emb = ask_agent.gcn_net([infer_next_state])
         term_score = ask_agent.termination_net(infer_next_state_emb).item()
         print("Termination Score:", term_score)
-        if term_score >= 0.5:
-            termination = True
+        # if term_score >= 0.5:
+        #     termination = True
         if infer_next_cand["feature"] == []:
             termination = True
 
@@ -127,7 +127,7 @@ def infer_features(ask_agent, args, infer_env, infer_state, infer_cand, infer_ac
 
 
 def infer_items(rec_agent, args, infer_env, infer_state, infer_cand, infer_action_space):
-    blockPrint()
+    # blockPrint()
     done = 0
     termination = False
     chosen_items = []
@@ -152,8 +152,8 @@ def infer_items(rec_agent, args, infer_env, infer_state, infer_cand, infer_actio
 
         term_score = rec_agent.termination_net(infer_next_state_emb).item()
         print("Termination Score:", term_score)
-        if term_score >= 0.5:
-            termination = True
+        # if term_score >= 0.5:
+        #     termination = True
         if infer_next_cand["feature"] == []:
             termination = True
 
@@ -193,9 +193,10 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
     else:
         user_size = args.eval_user_size
     print('The select Test size : ', user_size)
-
-    for user in tqdm(range(user_size)):
+    if args.block_print:
         blockPrint()
+    for user in tqdm(range(user_size)):
+        # blockPrint()
         print('\n================Episode:{}===================='.format(user))
         state, cand, action_space = env.reset()
         done = 0
