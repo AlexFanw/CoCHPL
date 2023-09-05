@@ -23,7 +23,7 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'next_cand'))
 
 
-def choose_option(ask_agent, rec_agent, state, cand):
+def choose_option(ask_agent, rec_agent, state, cand, option_strategy=0, decay_step=0):
     if cand["feature"] == [] or len(cand["item"]) < 10:
         return 0  # Recommend
     with torch.no_grad():
@@ -37,8 +37,10 @@ def choose_option(ask_agent, rec_agent, state, cand):
             ask_score.append(
                  value + ask_agent.policy_net(state_emb, feature, choose_action=False).detach().cpu().numpy().squeeze())
         ask_prop = np.exp(ask_score) / sum(np.exp(ask_score))
-        ask_Q = np.array(ask_score).dot(ask_prop)
-        # ask_Q = max(ask_score)
+        if option_strategy == 0:
+            ask_Q = np.array(ask_score).dot(ask_prop)
+        else:
+            ask_Q = max(ask_score)
 
         state_emb = rec_agent.gcn_net([state])
         item_cand = cand["item"]
@@ -50,11 +52,22 @@ def choose_option(ask_agent, rec_agent, state, cand):
             rec_score.append(
                  value + rec_agent.policy_net(state_emb, item, choose_action=False).detach().cpu().numpy().squeeze())
         rec_prop = np.exp(rec_score) / sum(np.exp(rec_score))
-        rec_Q = np.array(rec_score).dot(rec_prop)
-        # rec_Q = max(rec_score)
-        print("\n**OVER OPTION** ASK VALUE:{}, REC VALUE:{}".format(ask_Q, rec_Q))
+        
+        if option_strategy == 0:
+            rec_Q = np.array(rec_score).dot(rec_prop)
+        else:
+            rec_Q = max(rec_score)
+        print("\n**CHOOSE OPTION** ASK VALUE:{}, REC VALUE:{}\n".format(ask_Q, rec_Q))
+        
+        EPS_START=0.9
+        EPS_END=0.1
+        EPS_DECAY=0.0001
+        eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+                        math.exp(-1. * decay_step * EPS_DECAY)
         soft_random = random.random()
-        if soft_random >= 0.1:
+        # print(decay_step)
+        print("eps:_threshold:{}".format(eps_threshold))
+        if soft_random > eps_threshold:
             if ask_Q > rec_Q:
                 return 1
             else:
@@ -72,19 +85,12 @@ def calculate_hdcg_attribute(t, i):
 
 
 def option_critic_pipeline(args, kg, dataset, filename):
-    """rl Model Train
-
-    :param args: some experiment settings
-    :param kg: knowledge graph
-    :param dataset: dataset
-    :param filename: training model file saving path
-    :return:
-    """
-    set_random_seed(args.seed)
+    
     # Prepare the Environment
+    set_random_seed(args.seed)
     env = VariableRecommendEnv(kg, dataset,
                                args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
-                               cand_num=args.cand_num, cand_item_num=args.cand_item_num,
+                               cand_feature_num=args.cand_feature_num, cand_item_num=args.cand_item_num,
                                attr_num=args.attr_num, mode='train',
                                entropy_way=args.entropy_method)
 
@@ -101,32 +107,26 @@ def option_critic_pipeline(args, kg, dataset, filename):
     '''
     gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
                            embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
-                           hidden_size=args.hidden).to(args.device)
+                           hidden_size=args.hidden_size).to(args.device)
     '''
     ASK AGENT
     '''
-    # # ASK GCN Transformer
-    # ask_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-    #                            embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
-    #                            hidden_size=args.hidden).to(args.device)
+    
     # Ask Memory
     ask_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Ask Agent
     ask_agent = AskAgent(device=args.device, memory=ask_memory, action_size=embed.size(1),
-                         hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate,
+                         hidden_size=args.hidden_size, gcn_net=gcn_net, learning_rate=args.learning_rate,
                          l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net, alpha=args.alpha)
     '''
     REC AGENT
     '''
-    # # Rec GCN Transformer
-    # rec_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-    #                            embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
-    #                            hidden_size=args.hidden).to(args.device)
+    
     # Rec Memory
     rec_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Rec Agent
     rec_agent = RecAgent(device=args.device, memory=rec_memory, action_size=embed.size(1),
-                         hidden_size=args.hidden, gcn_net=gcn_net, learning_rate=args.learning_rate,
+                         hidden_size=args.hidden_size, gcn_net=gcn_net, learning_rate=args.learning_rate,
                          l2_norm=args.l2_norm, PADDING_ID=embed.size(0) - 1, value_net=value_net, alpha=args.alpha)
     # load parameters
     if args.load_rl_epoch != 0:
@@ -134,8 +134,8 @@ def option_critic_pipeline(args, kg, dataset, filename):
         ask_agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
         rec_agent.load_model(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
         value_net.load_value_net(data_name=args.data_name, filename=filename, epoch_user=args.load_rl_epoch)
-    # if epoch % args.eval_num == 0:
-    # _ = rl_evaluate(args, kg, dataset, filename, 0, ask_agent, rec_agent)
+
+    decay_step = 0
     for epoch in range(1 + args.load_rl_epoch, args.max_epoch + 1):
         tt = time.time()
         start = tt
@@ -165,8 +165,8 @@ def option_critic_pipeline(args, kg, dataset, filename):
                 env.cur_conver_step = 1
                 if done:
                     break
-                # print("Candidate: ", cand)
-                option = choose_option(ask_agent, rec_agent, state, cand)
+                decay_step += 1
+                option = choose_option(ask_agent, rec_agent, state, cand, args.option_strategy, decay_step)
 
                 '''
                 Intra Option: Select features / items
@@ -214,16 +214,15 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         if ask_score[i] > 0:
                             HDCG_attribute_list.append(calculate_hdcg_attribute(t, i))
                     # Optimize
-                    loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
+                    loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent, args.term_reg)
                     if loss is not None:
                         ask_loss.append(loss)
                         ask_state_infer_loss.append(loss_state)
-                        
-                    # # Optimize
-                    # loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
-                    # if loss is not None:
-                    #     rec_loss.append(loss)
-                    #     rec_state_infer_loss.append(loss_state)
+                    
+                    loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent, args.term_reg)
+                    if loss is not None:
+                        rec_loss.append(loss)
+                        rec_state_infer_loss.append(loss_state)
 
                 # RECOMMEND
                 elif option == 0:
@@ -272,16 +271,15 @@ def option_critic_pipeline(args, kg, dataset, filename):
                             total_reward += epi_reward
                             break
                     # Optimize
-                    loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent)
+                    loss, loss_state = rec_agent.optimize_model(args.batch_size, args.gamma, ask_agent, args.term_reg)
                     if loss is not None:
                         rec_loss.append(loss)
                         rec_state_infer_loss.append(loss_state)
-                        
-                    # # Optimize
-                    # loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent)
-                    # if loss is not None:
-                    #     ask_loss.append(loss)
-                    #     ask_state_infer_loss.append(loss_state)
+
+                    loss, loss_state = ask_agent.optimize_model(args.batch_size, args.gamma, rec_agent, args.term_reg)
+                    if loss is not None:
+                        ask_loss.append(loss)
+                        ask_state_infer_loss.append(loss_state)
 
                 if option == 1:
                     ask_step_list.append(env.cur_conver_step - 1)
@@ -315,51 +313,59 @@ def option_critic_pipeline(args, kg, dataset, filename):
 
         results = [SR5, SR10, SR15, Avg_Turn, Avg_REC_Turn, Avg_ASK_Turn, Avg_REC_Step, Avg_ASK_Step, HDCG_item / args.sample_times]
         save_rl_mtric(args.data_name, 'Train-' + filename, epoch, results, time.time() - start, mode='train')
-        if epoch % args.save_num == 0:
+        if epoch % args.save_epoch_num == 0:
             ask_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=epoch)
             rec_agent.save_model(data_name=args.data_name, filename=filename, epoch_user=epoch)
             value_net.save_value_net(data_name=args.data_name, filename=filename, epoch_user=epoch)
-        if epoch % args.eval_num == 0:
+        if epoch % args.eval_epoch_num == 0:
             _ = rl_evaluate(args, kg, dataset, filename, epoch, ask_agent, rec_agent)
     # print(test_performance)
 
 
 def set_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--block_print', '-block_print', type=int, default=1, help='Block Print or Not.')
+    # Basic Setting
+    parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM_STAR, YELP_STAR, BOOK, MOVIE],
+                        help='One of {LAST_FM_STAR, YELP_STAR, BOOK, MOVIE}.')
+    parser.add_argument('--max_rec_step', type=int, default=10, help='max recommend step in one turn')
+    parser.add_argument('--max_ask_step', type=int, default=3, help='max ask step in one turn')
+    parser.add_argument('--cand_feature_num', type=int, default=10, help='candidate sampling number')
+    parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')
+    parser.add_argument('--max_turn', type=int, default=15, help='max conversation turn')
+    
+    # Epoch Setting
+    parser.add_argument('--sample_times', type=int, default=100, help='the episodes of sampling')
+    parser.add_argument('--max_epoch', type=int, default=100, help='max training epoch')
+    parser.add_argument('--eval_epoch_num', type=int, default=10, help='the number of epoch to evaluate rl model and metric')
+    parser.add_argument('--save_epoch_num', type=int, default=10, help='the number of epoch to save rl model and metric')
+    
+    # Evaluate Setting
     parser.add_argument('--eval_user_size', '-eval_user_size', type=int, default=100, help='user size of evaluation in training or testing.')
+    parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading rl model')
+    
+    # GPU Resource Setting
+    parser.add_argument('--block_print', '-block_print', type=int, default=1, help='Block Print or Not.')
     parser.add_argument('--seed', '-seed', type=int, default=1, help='random seed.')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device.')
+    
+    # Hyperparameters Setting
     parser.add_argument('--batch_size', type=int, default=64, help='batch size.')
     parser.add_argument('--gamma', type=float, default=0.999, help='reward discount factor.')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='learning rate.')
     parser.add_argument('--l2_norm', type=float, default=1e-6, help='l2 regularization.')
     parser.add_argument('--alpha', type=float, default=1, help='TD alpha.')
-    parser.add_argument('--hidden', type=int, default=100, help='number of samples')
+    parser.add_argument('--hidden_size', type=int, default=100, help='number of samples')
     parser.add_argument('--memory_size', type=int, default=50000, help='size of memory ')
-    parser.add_argument('--data_name', type=str, default=LAST_FM_STAR, choices=[LAST_FM_STAR, YELP_STAR, BOOK, MOVIE],
-                        help='One of {LAST_FM_STAR, YELP_STAR, BOOK, MOVIE}.')
+    parser.add_argument('--option_strategy', type=int, default=0, help='{"0": softmax, "1": max}')
+    parser.add_argument('--term_reg', type=float, default=0, help='termination regularization')
+
+    # Graph and Embedding
     parser.add_argument('--entropy_method', type=str, default='weight_entropy',
                         help='entropy_method is one of {entropy, weight entropy}')
-    # Although the performance of 'weighted entropy' is better, 'entropy' is an alternative method considering the time cost.
-    parser.add_argument('--max_turn', type=int, default=15, help='max conversation turn')
-    parser.add_argument('--attr_num', type=int, help='the number of attributes')
-    parser.add_argument('--mode', type=str, default='train', help='the mode in [train, test]')
-    parser.add_argument('--load_rl_epoch', type=int, default=0, help='the epoch of loading rl model')
-
-    parser.add_argument('--sample_times', type=int, default=100, help='the episodes of sampling')
-    parser.add_argument('--max_epoch', type=int, default=100, help='max training epoch')
-    parser.add_argument('--eval_num', type=int, default=10, help='the number of epoch to evaluate rl model and metric')
-    parser.add_argument('--save_num', type=int, default=10, help='the number of epoch to save rl model and metric')
-    parser.add_argument('--observe_num', type=int, default=1000, help='the number of steps to print metric')
-    parser.add_argument('--cand_num', type=int, default=10, help='candidate sampling number')
-    parser.add_argument('--cand_item_num', type=int, default=10, help='candidate item sampling number')
     parser.add_argument('--fix_emb', action='store_false', help='fix embedding or not')
     parser.add_argument('--embed', type=str, default='transe', help='pretrained embeddings')
     parser.add_argument('--seq', type=str, default='transformer', help='sequential learning method')
     parser.add_argument('--gcn', action='store_false', help='use GCN or not')
-    parser.add_argument('--max_rec_step', type=int, default=10, help='max recommend step in one turn')
-    parser.add_argument('--max_ask_step', type=int, default=3, help='max ask step in one turn')
 
     args = parser.parse_args()
     return args

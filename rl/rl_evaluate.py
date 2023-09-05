@@ -11,42 +11,82 @@ from utils.utils import *
 from rl.recommend_env.env_variable_question import VariableRecommendEnv
 from tqdm import tqdm
 
-
-def choose_option(ask_agent, rec_agent, state, cand):
+def choose_option(ask_agent, rec_agent, state, cand, option_strategy=0):
     if cand["feature"] == [] or len(cand["item"]) < 10:
         return 0  # Recommend
     with torch.no_grad():
         state_emb = ask_agent.gcn_net([state])
         feature_cand = cand["feature"]
         ask_score = []
+        value = ask_agent.value_net(state_emb).detach().cpu().numpy().squeeze()
         for feature in feature_cand:
             feature = torch.LongTensor(np.array(feature).astype(int).reshape(-1, 1)).to(ask_agent.device)  # [N*1]
             feature = ask_agent.gcn_net.embedding(feature)
-            # print(ask_agent.value_net(state_emb))
             ask_score.append(
-                ask_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + ask_agent.policy_net(state_emb, feature,
-                                                                                                 choose_action=False).detach().cpu().numpy().squeeze())
-        # ask_Q = np.array(ask_score).dot(np.exp(ask_score) / sum(np.exp(ask_score)))
-        ask_Q = max(ask_score)
+                 value + ask_agent.policy_net(state_emb, feature, choose_action=False).detach().cpu().numpy().squeeze())
+        ask_prop = np.exp(ask_score) / sum(np.exp(ask_score))
+        if option_strategy == 0:
+            ask_Q = np.array(ask_score).dot(ask_prop)
+        else:
+            ask_Q = max(ask_score)
 
         state_emb = rec_agent.gcn_net([state])
         item_cand = cand["item"]
         rec_score = []
+        value = rec_agent.value_net(state_emb).detach().cpu().numpy().squeeze()
         for item in item_cand:
             item = torch.LongTensor(np.array(item).astype(int).reshape(-1, 1)).to(rec_agent.device)  # [N*1]
             item = rec_agent.gcn_net.embedding(item)
             rec_score.append(
-                rec_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + rec_agent.policy_net(state_emb, item,
-                                                                                                 choose_action=False).detach().cpu().numpy().squeeze())
-        # rec_Q = np.array(rec_score).dot(np.exp(rec_score) / sum(np.exp(rec_score)))
-        rec_Q = max(rec_score)
-        # return ask_Q / (ask_Q + rec_Q), rec_Q / (ask_Q + rec_Q)
-        # return math.exp(ask_Q) / (math.exp(ask_Q) + math.exp(rec_Q)), math.exp(rec_Q) / (
-        #         math.exp(ask_Q) + math.exp(rec_Q))
+                 value + rec_agent.policy_net(state_emb, item, choose_action=False).detach().cpu().numpy().squeeze())
+        rec_prop = np.exp(rec_score) / sum(np.exp(rec_score))
+        
+        if option_strategy == 0:
+            rec_Q = np.array(rec_score).dot(rec_prop)
+        else:
+            rec_Q = max(rec_score)
+        print("\n**CHOOSE OPTION** ASK VALUE:{}, REC VALUE:{}\n".format(ask_Q, rec_Q))
         if ask_Q > rec_Q:
             return 1
         else:
             return 0
+        
+        
+# def choose_option(ask_agent, rec_agent, state, cand):
+#     if cand["feature"] == [] or len(cand["item"]) < 10:
+#         return 0  # Recommend
+#     with torch.no_grad():
+#         state_emb = ask_agent.gcn_net([state])
+#         feature_cand = cand["feature"]
+#         ask_score = []
+#         for feature in feature_cand:
+#             feature = torch.LongTensor(np.array(feature).astype(int).reshape(-1, 1)).to(ask_agent.device)  # [N*1]
+#             feature = ask_agent.gcn_net.embedding(feature)
+#             # print(ask_agent.value_net(state_emb))
+#             ask_score.append(
+#                 ask_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + ask_agent.policy_net(state_emb, feature,
+#                                                                                                  choose_action=False).detach().cpu().numpy().squeeze())
+#         # ask_Q = np.array(ask_score).dot(np.exp(ask_score) / sum(np.exp(ask_score)))
+#         ask_Q = max(ask_score)
+
+#         state_emb = rec_agent.gcn_net([state])
+#         item_cand = cand["item"]
+#         rec_score = []
+#         for item in item_cand:
+#             item = torch.LongTensor(np.array(item).astype(int).reshape(-1, 1)).to(rec_agent.device)  # [N*1]
+#             item = rec_agent.gcn_net.embedding(item)
+#             rec_score.append(
+#                 rec_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + rec_agent.policy_net(state_emb, item,
+#                                                                                                  choose_action=False).detach().cpu().numpy().squeeze())
+#         # rec_Q = np.array(rec_score).dot(np.exp(rec_score) / sum(np.exp(rec_score)))
+#         rec_Q = max(rec_score)
+#         # return ask_Q / (ask_Q + rec_Q), rec_Q / (ask_Q + rec_Q)
+#         # return math.exp(ask_Q) / (math.exp(ask_Q) + math.exp(rec_Q)), math.exp(rec_Q) / (
+#         #         math.exp(ask_Q) + math.exp(rec_Q))
+#         if ask_Q > rec_Q:
+#             return 1
+#         else:
+#             return 0
 
 
 def infer_features(ask_agent, args, infer_env, infer_state, infer_cand, infer_action_space):
@@ -132,7 +172,7 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
 
     # Environment
     env = VariableRecommendEnv(kg, dataset, args.data_name, args.embed, seed=args.seed, max_turn=args.max_turn,
-                               cand_num=args.cand_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num,
+                               cand_feature_num=args.cand_feature_num, cand_item_num=args.cand_item_num, attr_num=args.attr_num,
                                mode='test', entropy_way=args.entropy_method)
     set_random_seed(args.seed)
     # Statistic initial

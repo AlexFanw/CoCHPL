@@ -7,7 +7,7 @@ from collections import Counter
 
 
 class VariableRecommendEnv(object):
-    def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_num=10, cand_item_num=10, attr_num=20,
+    def __init__(self, kg, dataset, data_name, embed, seed=1, max_turn=15, cand_feature_num=10, cand_item_num=10, attr_num=20,
                  mode='train', entropy_way='weight entropy'):
         self.data_name = data_name
         self.mode = mode
@@ -24,11 +24,11 @@ class VariableRecommendEnv(object):
         self.rec_num = 10
         self.random_sample_feature = False
         self.random_sample_item = False
-        if cand_num == 0:
-            self.cand_num = 10
+        if cand_feature_num == 0:
+            self.cand_feature_num = 10
             self.random_sample_feature = True
         else:
-            self.cand_num = cand_num
+            self.cand_feature_num = cand_feature_num
         if cand_item_num == 0:
             self.cand_item_num = 10
             self.random_sample_item = True
@@ -82,7 +82,7 @@ class VariableRecommendEnv(object):
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
         self.reward_dict = {
-            'acc': 1e-2,
+            'acc': 1e-1,
             'rej': -1e-2,
             'rec_suc': 1,
             'quit': 0,
@@ -168,7 +168,7 @@ class VariableRecommendEnv(object):
 
         # Sort reachable features according to the entropy of features
         reach_fea_score = self._feature_score()
-        max_ind_list = (-1 * np.array(reach_fea_score)).argsort()[:self.cand_num]
+        max_ind_list = (-1 * np.array(reach_fea_score)).argsort()[:self.cand_feature_num]
         max_fea_id = [self.reachable_feature[i] for i in max_ind_list]
         [self.reachable_feature.remove(v) for v in max_fea_id]
         [self.reachable_feature.insert(0, v) for v in max_fea_id[::-1]]
@@ -178,9 +178,9 @@ class VariableRecommendEnv(object):
     def _get_cand(self):
         if self.random_sample_feature:
             cand_feature = self._map_to_all_id(
-                random.sample(self.reachable_feature, min(len(self.reachable_feature), self.cand_num)), 'feature')
+                random.sample(self.reachable_feature, min(len(self.reachable_feature), self.cand_feature_num)), 'feature')
         else:
-            cand_feature = self._map_to_all_id(self.reachable_feature[:self.cand_num], 'feature')
+            cand_feature = self._map_to_all_id(self.reachable_feature[:self.cand_feature_num], 'feature')
         if self.random_sample_item:
             cand_item = self._map_to_all_id(
                 random.sample(self.cand_items, min(len(self.cand_items), self.cand_item_num)), 'item')
@@ -252,7 +252,7 @@ class VariableRecommendEnv(object):
         if attribute is not None:
             asked_feature = self._map_to_old_id(attribute)
             print('==> Action: ask features {}, max entropy feature {}'.format(asked_feature,
-                                                                              self.reachable_feature[:self.cand_num]))
+                                                                              self.reachable_feature[:self.cand_feature_num]))
             # update user's profile:  user_acc_feature & user_rej_feature
             reward, done, acc_rej = self._ask_update(asked_feature, mode=mode, infer=infer)
             self._update_cand_items(asked_feature, acc_rej)  # update cand_items
@@ -292,7 +292,7 @@ class VariableRecommendEnv(object):
         self._update_feature_entropy()
         if len(self.reachable_feature) != 0:  # if reachable_feature == 0 :cand_item= 1
             reach_fea_score = self._feature_score()
-            max_ind_list = (-1 * np.array(reach_fea_score)).argsort()[:self.cand_num]
+            max_ind_list = (-1 * np.array(reach_fea_score)).argsort()[:self.cand_feature_num]
             max_fea_id = [self.reachable_feature[i] for i in max_ind_list]
             [self.reachable_feature.remove(v) for v in max_fea_id]
             [self.reachable_feature.insert(0, v) for v in max_fea_id[::-1]]
