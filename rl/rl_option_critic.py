@@ -95,8 +95,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
                                entropy_way=args.entropy_method)
 
     # User&Feature Embedding
-    embed = torch.FloatTensor(
-        np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
+    embed = torch.FloatTensor(np.concatenate((env.ui_embeds, env.feature_emb, np.zeros((1, env.ui_embeds.shape[1]))), axis=0))
     # print(embed.size(0), embed.size(1))
     '''
     VALUE NET

@@ -87,6 +87,9 @@ class VariableRecommendEnv(object):
             'rec_suc': 1,
             'quit': 0,
         }
+        if self.data_name == "MOVIE":
+            self.reward_dict["acc"] = 1e-2
+            self.reward_dict["rej"] = -1e-4
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
     def __load_rl_data__(self, data_name, mode):

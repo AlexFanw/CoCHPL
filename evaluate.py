@@ -28,14 +28,13 @@ FeatureDict = {
 
 
 def evaluate(args, kg, dataset, filename):
-    """rl Model Train
-
-        :param args: some experiment settings
-        :param kg: knowledge graph
-        :param dataset: dataset
-        :param filename: training model file saving path
-        :return:
-        """
+    """
+    Evaluate the model
+    :param args: arguments
+    :param kg: knowledge graph
+    :param dataset: dataset
+    :param filename: filename
+    """
     set_random_seed(args.seed)
     # Prepare the Environment
     env = VariableRecommendEnv(kg, dataset,
@@ -58,10 +57,6 @@ def evaluate(args, kg, dataset, filename):
     '''
     ASK AGENT
     '''
-    # # ASK GCN Transformer
-    # ask_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-    #                            embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
-    #                            hidden_size=args.hidden_size).to(args.device)
     # Ask Memory
     ask_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Ask Agent
@@ -71,10 +66,6 @@ def evaluate(args, kg, dataset, filename):
     '''
     REC AGENT
     '''
-    # # Rec GCN Transformer
-    # rec_gcn_net = GraphEncoder(device=args.device, entity=embed.size(0), emb_size=embed.size(1), kg=kg,
-    #                            embeddings=embed, fix_emb=args.fix_emb, seq=args.seq, gcn=args.gcn,
-    #                            hidden_size=args.hidden_size).to(args.device)
     # Rec Memory
     rec_memory = ReplayMemoryPER(args.memory_size)  # 50000
     # Rec Agent

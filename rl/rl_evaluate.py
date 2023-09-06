@@ -50,43 +50,6 @@ def choose_option(ask_agent, rec_agent, state, cand, option_strategy=0):
             return 1
         else:
             return 0
-        
-        
-# def choose_option(ask_agent, rec_agent, state, cand):
-#     if cand["feature"] == [] or len(cand["item"]) < 10:
-#         return 0  # Recommend
-#     with torch.no_grad():
-#         state_emb = ask_agent.gcn_net([state])
-#         feature_cand = cand["feature"]
-#         ask_score = []
-#         for feature in feature_cand:
-#             feature = torch.LongTensor(np.array(feature).astype(int).reshape(-1, 1)).to(ask_agent.device)  # [N*1]
-#             feature = ask_agent.gcn_net.embedding(feature)
-#             # print(ask_agent.value_net(state_emb))
-#             ask_score.append(
-#                 ask_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + ask_agent.policy_net(state_emb, feature,
-#                                                                                                  choose_action=False).detach().cpu().numpy().squeeze())
-#         # ask_Q = np.array(ask_score).dot(np.exp(ask_score) / sum(np.exp(ask_score)))
-#         ask_Q = max(ask_score)
-
-#         state_emb = rec_agent.gcn_net([state])
-#         item_cand = cand["item"]
-#         rec_score = []
-#         for item in item_cand:
-#             item = torch.LongTensor(np.array(item).astype(int).reshape(-1, 1)).to(rec_agent.device)  # [N*1]
-#             item = rec_agent.gcn_net.embedding(item)
-#             rec_score.append(
-#                 rec_agent.value_net(state_emb).detach().cpu().numpy().squeeze() + rec_agent.policy_net(state_emb, item,
-#                                                                                                  choose_action=False).detach().cpu().numpy().squeeze())
-#         # rec_Q = np.array(rec_score).dot(np.exp(rec_score) / sum(np.exp(rec_score)))
-#         rec_Q = max(rec_score)
-#         # return ask_Q / (ask_Q + rec_Q), rec_Q / (ask_Q + rec_Q)
-#         # return math.exp(ask_Q) / (math.exp(ask_Q) + math.exp(rec_Q)), math.exp(rec_Q) / (
-#         #         math.exp(ask_Q) + math.exp(rec_Q))
-#         if ask_Q > rec_Q:
-#             return 1
-#         else:
-#             return 0
 
 
 def infer_features(ask_agent, args, infer_env, infer_state, infer_cand, infer_action_space):
@@ -308,7 +271,6 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
           'Avg_REC_STEP:{}\n'
           'Avg_ASK_STEP:{}'.format(AvgT, Avg_REC_Turn, Avg_ASK_Turn, Avg_REC_STEP, Avg_ASK_STEP))
 
-    # SR_all = [SR5_mean, SR10_mean, SR15_mean, AvgT_mean, Rank_mean, reward_mean]
 
     results = [SR[5], SR[10], SR[15], AvgT, Avg_REC_Turn, Avg_ASK_Turn, Avg_REC_STEP, Avg_ASK_STEP, HDCG_item]
     # Single Epoch file

@@ -143,7 +143,7 @@ class RecAgent(object):
         # q_estim = q_softmax
         q_now_target[non_final_mask] += GAMMA * ((1-next_termination) * q_next_items[non_final_mask]
                                                  + next_termination * q_estim[non_final_mask])
-        q_now_target = q_now_items + self.alpha * (q_now_target - q_now_items)
+        # q_now_target = q_now_items + self.alpha * (q_now_target - q_now_items)
 
         # prioritized experience replay
         errors = (q_now_items - q_now_target).detach().cpu().squeeze().tolist()
@@ -154,25 +154,17 @@ class RecAgent(object):
         # termination loss
         termination_loss = next_termination * (q_next_items[non_final_mask].detach() - q_value_next.detach() - term_reg)
         termination_loss = (torch.FloatTensor(is_weights)[non_final_mask].to(self.device) * termination_loss).mean()
-        # next_termination_target = next_termination + self.alpha * next_termination * \
-        #                           (q_softmax[non_final_mask] - q_next_items[non_final_mask] - 1)
-        # loss_termination = (torch.FloatTensor(is_weights).to(self.device)
-        #                     * self.loss_func(next_termination, next_termination_target.detach())).mean()
         
         self.optimizer.zero_grad()
         self.optimizer_termination.zero_grad()
-        # ask_agent.optimizer.zero_grad()
 
         critic_loss.backward()
         termination_loss.backward()
 
         self.optimizer.step()
         self.optimizer_termination.step()
-        # ask_agent.optimizer.step()
 
-        '''
-        State Transition
-        '''
+        # state transition loss
         states = []
         actions = []
         rewards = []
