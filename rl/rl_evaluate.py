@@ -228,7 +228,7 @@ def rl_evaluate(args, kg, dataset, filename, epoch, ask_agent=None, rec_agent=No
                 state = next_state
                 cand = next_cand
                 if done:
-                    if reward == env.reward_dict["rec_suc"]:  # recommend successfully
+                    if reward == env.reward_dict["rec_acc"]:  # recommend successfully
                         Suc_Turn_list.append(t)
                         HDCG_item = HDCG_item + (
                                 1 / math.log(t + 2, 2) + (1 / math.log(t + 1, 2) - 1 / math.log(t + 2, 2)) /

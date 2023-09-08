@@ -152,7 +152,7 @@ class AskAgent(object):
         critic_loss = (torch.FloatTensor(is_weights).to(self.device) * self.loss_func(q_now_features, q_now_target.detach())).mean()
         # termination loss
         termination_loss = next_termination * (q_next_features[non_final_mask].detach() - q_value_next.detach() - term_reg)
-        termination_loss = (torch.FloatTensor(is_weights)[non_final_mask].to(self.device) * termination_loss).mean()
+        termination_loss = (torch.FloatTensor(is_weights).to(self.device)[non_final_mask] * termination_loss).mean()
         
         # update
         self.optimizer.zero_grad()

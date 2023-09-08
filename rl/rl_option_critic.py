@@ -262,7 +262,7 @@ def option_critic_pipeline(args, kg, dataset, filename):
                         # After Done
                         if done or (termination and t == args.max_turn):
                             # every episode update the target model to be same with model
-                            if reward == env.reward_dict["rec_suc"]:  # recommend successfully
+                            if reward == env.reward_dict["rec_acc"]:  # recommend successfully
                                 Suc_Turn_list.append(t)
                                 HDCG_item += calculate_hdcg_item(t, done)
 

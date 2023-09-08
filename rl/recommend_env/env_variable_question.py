@@ -81,15 +81,19 @@ class VariableRecommendEnv(object):
             self.ui_embeds = nn.Embedding(self.user_length + self.item_length, 64).weight.data.numpy()
             self.feature_emb = nn.Embedding(self.feature_length, 64).weight.data.numpy()
         # self.feature_length = self.feature_emb.shape[0]-1
+        # self.reward_dict = {
+        #     'acc': 1e-2,
+        #     'rej': -1e-4,
+        #     'rec_suc': 1,
+        #     'quit': 0,
+        # }
         self.reward_dict = {
-            'acc': 1e-1,
-            'rej': -1e-2,
-            'rec_suc': 1,
+            'ask_acc': 0,
+            'ask_rej': 0,
+            'rec_acc': 1,
+            'rec_rej': 0,
             'quit': 0,
         }
-        if self.data_name == "MOVIE":
-            self.reward_dict["acc"] = 1e-2
-            self.reward_dict["rej"] = -1e-4
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
     def __load_rl_data__(self, data_name, mode):
@@ -365,24 +369,24 @@ class VariableRecommendEnv(object):
                 acc_rej = True
                 self.user_acc_feature.append(asked_feature)
                 self.cur_node_set.append(asked_feature)
-                reward = self.reward_dict['acc']
+                reward = self.reward_dict['ask_acc']
             else:
                 acc_rej = False
                 self.user_rej_feature.append(asked_feature)
-                reward = self.reward_dict['rej']
+                reward = self.reward_dict['ask_rej']
         elif asked_feature in feature_groundtrue:
             acc_rej = True
             self.user_acc_feature.append(asked_feature)
             self.cur_node_set.append(asked_feature)
-            reward = self.reward_dict['acc']
+            reward = self.reward_dict['ask_acc']
         else:
             acc_rej = False
             self.user_rej_feature.append(asked_feature)
-            reward = self.reward_dict['rej']
+            reward = self.reward_dict['ask_rej']
 
         if not self.cand_items:  # candidate items is empty
             done = 1
-            reward = self.reward_dict['rej']
+            reward = self.reward_dict['ask_rej']
 
         return reward, done, acc_rej
 
@@ -416,9 +420,9 @@ class VariableRecommendEnv(object):
         if mode == 'test' and infer is not None:
             if infer > 0.5:  # assume that user accept
                 # TODO: reward = self.reward_dict['rec_suc']
-                reward = self.reward_dict['rej']
+                reward = self.reward_dict['rec_rej']
             else:
-                reward = self.reward_dict['rej']
+                reward = self.reward_dict['rec_rej']
             for item in recom_items:
                 del self.item_feature_pair[item]
                 idx = self.cand_items.index(item)
@@ -427,7 +431,7 @@ class VariableRecommendEnv(object):
                 # self.cand_items = self.cand_items[self.rec_num:]  #update candidate items
             done = 0
         elif self.target_item not in recom_items:
-            reward = self.reward_dict['rej']
+            reward = self.reward_dict['rec_rej']
             # if len(self.cand_items) >= self.rec_num:
             for item in recom_items:
                 del self.item_feature_pair[item]
@@ -437,7 +441,7 @@ class VariableRecommendEnv(object):
                 # self.cand_items = self.cand_items[self.rec_num:]  #update candidate items
             done = 0
         elif self.target_item in recom_items:
-            reward = self.reward_dict['rec_suc']
+            reward = self.reward_dict['rec_acc']
             tmp_score = []
             for item in recom_items:
                 idx = self.cand_items.index(item)
