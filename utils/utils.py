@@ -154,7 +154,7 @@ def set_random_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
-        print("CUDA is Available")
+        # print("CUDA is Available")
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.benchmark = False

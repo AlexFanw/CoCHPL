@@ -76,8 +76,8 @@ def infer_features(ask_agent, args, infer_env, infer_state, infer_cand, infer_ac
         infer_next_state_emb = ask_agent.gcn_net([infer_next_state])
         term_score = ask_agent.termination_net(infer_next_state_emb).item()
         print("Termination Score:", term_score)
-        # if term_score >= 0.5:
-        #     termination = True
+        if term_score >= 0.5:
+            termination = True
         if infer_next_cand["feature"] == []:
             termination = True
 
@@ -115,8 +115,8 @@ def infer_items(rec_agent, args, infer_env, infer_state, infer_cand, infer_actio
 
         term_score = rec_agent.termination_net(infer_next_state_emb).item()
         print("Termination Score:", term_score)
-        # if term_score >= 0.5:
-        #     termination = True
+        if term_score >= 0.5:
+            termination = True
         if infer_next_cand["feature"] == []:
             termination = True
 

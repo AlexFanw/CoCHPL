@@ -88,12 +88,21 @@ class VariableRecommendEnv(object):
         #     'quit': 0,
         # }
         self.reward_dict = {
-            'ask_acc': 0,
-            'ask_rej': 0,
+            'ask_acc': 1e-2,
+            'ask_rej': -1e-4,
             'rec_acc': 1,
-            'rec_rej': 0,
+            'rec_rej': -1e-4,
             'quit': 0,
         }
+        if self.data_name == 'MOVIE':
+            print('MOVIE: set reward')
+            self.reward_dict = {
+            'ask_acc': 1e-5,
+            'ask_rej': -1e-4,
+            'rec_acc': 1,
+            'rec_rej': -1e-4,
+            'quit': 0,
+            }
         self.attr_count_dict = dict()  # This dict is used to calculate entropy
 
     def __load_rl_data__(self, data_name, mode):
@@ -101,11 +110,13 @@ class VariableRecommendEnv(object):
             # load the interaction records between User and Item
             with open(os.path.join(RAW_DATA_DIR[data_name], 'UI_Interaction_data/review_dict_train.json'),
                       encoding='utf-8') as f:
-                print('train_data: load RL valid datasets')
+                print('train_data: load RL train datasets')
                 mydict = json.load(f)
         elif mode == 'test':
             with open(os.path.join(RAW_DATA_DIR[data_name], 'UI_Interaction_data/review_dict_test.json'),
                       encoding='utf-8') as f:
+            # with open(os.path.join(RAW_DATA_DIR[data_name], 'UI_Interaction_data/review_dict_valid.json'),
+            #           encoding='utf-8') as f:
                 print('test_data: load RL test datasets')
                 mydict = json.load(f)
         return mydict
