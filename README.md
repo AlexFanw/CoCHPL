@@ -1,3 +1,3 @@
-# Hierarchical Long-Short Option Policy Learning for Multi-Choice Multi-Round Conversational Recommendation
+# Chain-of-Choice Hierarchical Policy Learning for Conversational Recommendation
 
 
