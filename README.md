@@ -1,6 +1,6 @@
 # CoCHPL
 
-🎉**Chain-of-Choice Hierarchical Policy Learning for Conversational Recommendation** has been accepted by DASFAA 2024.
+🚀 The implementation of **Chain-of-Choice Hierarchical Policy Learning for Conversational Recommendation** (DASFAA 2024).
 
 ## 1. Training
 
